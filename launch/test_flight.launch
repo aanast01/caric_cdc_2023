@@ -1,0 +1,16 @@
+<launch>
+
+    <arg name="scenario" default="mbs" />
+    <arg name="drone" default="jurong" />
+
+    <group ns="$(arg drone)">
+        
+        <arg name="namespace"  default="$(arg drone)" />
+        <param name="scenario" value="$(arg scenario)" />
+        <param name="namespace" value="$(arg namespace)" />
+        <param name="debug" value="true" />
+
+	<node name="mpc_controller" pkg="kios_solution" type="mpc_implementation.py"  output="screen"/>
+    </group>
+    
+</launch>

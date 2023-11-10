@@ -1,0 +1,101 @@
+<launch>
+
+    <arg name="manual_control" default="false" />
+    <arg name="scenario" default="hangar" />
+    
+    <!-- Launch the simulator -->
+    <include file="$(find caric_mission)/launch/run_hangar.launch"/>
+    <!-- <include file="$(find caric_mission)/launch/run_crane.launch"/> -->
+
+
+    <group ns="jurong">
+        
+        <arg name="namespace"  default="jurong" />
+        <param name="scenario" value="$(arg scenario)" />
+        <param name="namespace" value="$(arg namespace)" />
+        <param name="debug" value="true" />
+        
+        <node pkg="octomap_server" type="octomap_server_node" name="octomap_server_$(arg namespace)">
+		<param name="resolution" value="2" />
+		
+		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
+		<param name="frame_id" type="string" value="world" />
+
+		<param name="sensor_model/hit" value="1.0" />
+		<param name="sensor_model/miss" value="0.3" />
+
+		<param name="sensor_model/min" value="0.3" />
+		<param name="sensor_model/max" value="1.0" />
+		
+		<!-- maximum range to integrate (speedup!) -->
+		<param name="sensor_model/max_range" value="-1" />
+		
+		<param name="pointcloud_min_z" value="2.0" />
+		
+		<!-- data source to integrate (PointCloud2) -->
+		<remap from="cloud_in" 		to="/$(arg namespace)/cloud_inW" />
+	
+    	</node>
+
+		<node name="init_flight" pkg="kios_solution" type="test_flight.py"  output="screen"/>
+		<!-- <node name="mpc_controller" pkg="kios_solution" type="mpc_implementation.py"  output="screen"/> -->
+    </group>
+
+    <group ns="changi">
+    
+        <arg name="namespace"  default="changi" />
+
+    </group>
+    
+    <group ns="raffles">
+        
+        <arg name="namespace"  default="raffles" />
+        <param name="scenario" value="$(arg scenario)" />
+        <param name="namespace" value="$(arg namespace)" />
+        <param name="debug" value="false" />
+
+        <node pkg="octomap_server" type="octomap_server_node" name="octomap_server_$(arg namespace)">
+		<param name="resolution" value="2" />
+		
+		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
+		<param name="frame_id" type="string" value="world" />
+
+		<param name="sensor_model/hit" value="1.0" />
+		<param name="sensor_model/miss" value="0.1" />
+
+		<param name="sensor_model/min" value="0.1" />
+		<param name="sensor_model/max" value="1.0" />
+		
+		<!-- maximum range to integrate (speedup!) -->
+		<param name="sensor_model/max_range" value="-1" />
+		
+		<param name="pointcloud_min_z" value="2.0" />
+		
+		<!-- data source to integrate (PointCloud2) -->
+		<remap from="cloud_in" 		to="/$(arg namespace)/cloud_inW" />
+		
+    	</node>
+    	
+    	<node name="init_flight" pkg="kios_solution" type="test_flight.py"  output="screen" />
+		<!-- <node name="mpc_controller" pkg="kios_solution" type="mpc_implementation.py"  output="screen"/> -->
+    </group>
+
+    <group ns="sentosa">
+        
+        <arg name="namespace"  default="sentosa" />
+
+    </group>
+    
+    <group ns="nanyang">
+        
+        <arg name="namespace"  default="nanyang" />
+
+    </group>
+    
+    <!-- For visualization -->
+    <node name="odom2tf" pkg="caric_mission" type="odom2tf.py"  />
+    
+    <!-- octomap translator service -->
+    <node name="octomapTranslate" pkg="kios_solution" type="kios_solution_octomap_translator_node"  />
+
+</launch>
