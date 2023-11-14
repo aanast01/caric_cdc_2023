@@ -6,10 +6,12 @@ from gazebo_msgs.srv import GetModelState
 from sensor_msgs.msg import PointCloud, PointCloud2
 import sensor_msgs.point_cloud2
 from nav_msgs.msg import Odometry
+from caric_mission.srv import CreatePPComTopic
+from kios_solution.msg import area
 
 debug = False
 TAG = ""
-grid_res = 2
+grid_res = 6
 odom = Odometry()
 
 def set_tag(tag):
@@ -137,7 +139,7 @@ if __name__ == '__main__':
     rospy.init_node(namespace, anonymous=True)
     log_info(namespace)
 
-    rate = rospy.Rate(10)
+    rate = rospy.Rate(1)
 
     # wait for gazebo
     rospy.wait_for_service("/gazebo/get_model_state")
@@ -145,7 +147,6 @@ if __name__ == '__main__':
     rate.sleep()
 
     state = get_state(model_name=scenario)
-
     while state.status_message != "GetModelState: got properties":
         if debug:
             rospy.loginfo("[TESTING FLIGHT SCRIPT: GET STATE]: " + namespace)
@@ -154,6 +155,17 @@ if __name__ == '__main__':
         
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
+    
+    # Create a ppcom publisher
+    # Wait for service to appear
+    rospy.wait_for_service('/create_ppcom_topic')
+
+    # Create a service proxy
+    create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
+    # Register the topic with ppcom router
+    response = create_ppcom_topic('gcs', ['all'], '/world_coords', 'kios_solution', 'area')
+    # Create the publisher
+    msg_pub = rospy.Publisher('/world_coords', area, queue_size=1)
 
     # Get Bounding Box Verticies
     bboxes = rospy.wait_for_message("/gcs/bounding_box_vertices/", PointCloud)
@@ -161,6 +173,29 @@ if __name__ == '__main__':
 
     # Get Neighbor Positions
     neighbors = rospy.wait_for_message("/"+namespace+"/nbr_odom_cloud", PointCloud2)
-    min_max = find_world_min_max(neighbors, min_max)
     
-    print(min_max)
+    
+    #print(min_max)
+    # Calculate discretized world
+    min_max = find_world_min_max(neighbors, min_max)
+    size_x = (abs(min_max[0]) + abs(min_max[1]))/grid_res
+    size_y = (abs(min_max[2]) + abs(min_max[3]))/grid_res
+    size_z = (abs(min_max[4]) + abs(min_max[5]))/grid_res
+
+    msg = area()
+    msg.minPoint.x = min_max[0]
+    msg.minPoint.y = min_max[2]
+    msg.minPoint.z = min_max[4]
+    msg.size.x = size_x
+    msg.size.y = size_y
+    msg.size.z = size_z
+    msg.resolution.data = grid_res
+    msg_pub.publish(msg)
+    log_info(f"{msg}")
+    
+    while not rospy.is_shutdown():
+        rate.sleep()
+        msg_pub.publish(msg)
+    #rospy.spin()
+
+
