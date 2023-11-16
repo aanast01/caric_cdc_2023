@@ -1,13 +1,16 @@
 ### GCS LOGIC CODE ###
 #### Created By Kios ####
-##### Nov 2023 #####
+##### 10 Nov 2023 #####
 import rospy
 from gazebo_msgs.srv import GetModelState
 from sensor_msgs.msg import PointCloud, PointCloud2
 import sensor_msgs.point_cloud2
 from nav_msgs.msg import Odometry
 from caric_mission.srv import CreatePPComTopic
-from kios_solution.msg import area
+from kios_solution.msg import area, norms
+from geometry_msgs.msg import Point
+from scipy.spatial import Delaunay, ConvexHull
+import numpy as np
 
 debug = False
 TAG = ""
@@ -121,12 +124,82 @@ def find_world_min_max(msg, min_max):
         #print("\nneighbor x: " + str(x) + " y: " + str(y) + " z: " + str(z))
     return [minx, maxx, miny, maxy, minz, maxz]
 
+def find_norms(bboxes):
+    # 3D vertices
+    vertices = np.zeros((len(bboxes.points),3))
+    for i, point in enumerate(reversed(bboxes.points)):
+        vertices[i,0] = point.x
+        vertices[i,1] = point.y
+        vertices[i,2] = point.z
+        
+    # Calculate Convex Hull
+    # hull = ConvexHull(vertices)
+    
+    # # Extract facets and their normals
+    # facets = []
+    # facet_normals = []
+    
+    # for simplex in hull.simplices:
+    #     facet = vertices[simplex]
+    #     mid_x = np.mean([facet[0][0], facet[1][0], facet[2][0]])
+    #     mid_y = np.mean([facet[0][1], facet[1][1], facet[2][1]])
+    #     mid_z = np.mean([facet[0][2], facet[1][2], facet[2][2]])
+    #     facet_mid = [mid_x, mid_y, mid_z]
+    #     facets.append(facet_mid)
+    #     # Calculate normal vector for each facet
+    #     normal = np.cross(facet[1] - facet[0], facet[2] - facet[0])
+    #     normal /= np.linalg.norm(normal)
+
+    #     facet_normals.append(normal)
+
+    #print(vertices)
+    # Create Delaunay triangulation
+    DT = Delaunay(vertices)
+    
+    # Extract free boundary
+    edges = DT.convex_hull  # Convex hull represents the free boundary in Delaunay triangulation
+
+    # Calculate incenter of triangles
+    #print(DT.simplices)
+    triangles = vertices[edges]
+
+    P = np.mean(triangles, axis=1)
+    
+    # Calculate face normals manually
+    normals = []
+    for i, triangle in enumerate(triangles):
+        A, B, C = triangle
+        AB = B - A
+        AC = C - A
+        normal = np.cross(AB, AC)
+        normal /= np.linalg.norm(normal)
+        if DT.find_simplex(P[i]+normal) >= 0:
+            normals.append(-normal)
+        else:
+            normals.append(normal)
+    
+    F = np.array(normals)
+ 
+    # Now P contains the triangle incenters and F contains the face normals
+
+    # Display facets and their normals
+    # print("Facets:")
+    # for facet in facets:
+    #     print(facet)
+    
+    # print("\nFacet Normals:")
+    # for normal in facet_normals:
+    #     print(normal)
+
+    return [P, F]
+
 if __name__ == '__main__':
     # init
     try:
         namespace = rospy.get_param('namespace') # node_name/argsname
         scenario = rospy.get_param('scenario')
         debug = rospy.get_param('debug')
+        grid_res = rospy.get_param('grid_resolution')
         set_tag("[" + namespace.upper() + " SCRIPT]: ")
         #rospy.loginfo(TAG + namespace)
     except Exception as e:
@@ -155,6 +228,7 @@ if __name__ == '__main__':
         
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
+   
     
     # Create a ppcom publisher
     # Wait for service to appear
@@ -164,12 +238,31 @@ if __name__ == '__main__':
     create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
     # Register the topic with ppcom router
     response = create_ppcom_topic('gcs', ['all'], '/world_coords', 'kios_solution', 'area')
+    response = create_ppcom_topic('gcs', ['all'], '/norms', 'kios_solution', 'norms')
     # Create the publisher
+    # coords pub
     msg_pub = rospy.Publisher('/world_coords', area, queue_size=1)
+    # norm pub
+    norm_pub = rospy.Publisher('/norms', norms, queue_size=1)
 
     # Get Bounding Box Verticies
     bboxes = rospy.wait_for_message("/gcs/bounding_box_vertices/", PointCloud)
     min_max = process_boxes(bboxes)
+
+    [facets, normls] = find_norms(bboxes)
+    norm_msg = norms()
+    for facet, norm in zip(facets, normls):
+        facet_mid = Point()
+        facet_mid.x = facet[0]
+        facet_mid.y = facet[1]
+        facet_mid.z = facet[2]
+        norm_msg.facet_mids.append(facet_mid)
+        norm_point = Point()
+        norm_point.x = norm[0]
+        norm_point.y = norm[1]
+        norm_point.z = norm[2]
+        norm_msg.normals.append(norm_point)
+
 
     # Get Neighbor Positions
     neighbors = rospy.wait_for_message("/"+namespace+"/nbr_odom_cloud", PointCloud2)
@@ -182,20 +275,21 @@ if __name__ == '__main__':
     size_y = (abs(min_max[2]) + abs(min_max[3]))/grid_res
     size_z = (abs(min_max[4]) + abs(min_max[5]))/grid_res
 
-    msg = area()
-    msg.minPoint.x = min_max[0]
-    msg.minPoint.y = min_max[2]
-    msg.minPoint.z = min_max[4]
-    msg.size.x = size_x
-    msg.size.y = size_y
-    msg.size.z = size_z
-    msg.resolution.data = grid_res
-    msg_pub.publish(msg)
-    log_info(f"{msg}")
+    area_msg = area()
+    area_msg.minPoint.x = min_max[0]
+    area_msg.minPoint.y = min_max[2]
+    area_msg.minPoint.z = min_max[4]
+    area_msg.size.x = size_x
+    area_msg.size.y = size_y
+    area_msg.size.z = size_z
+    area_msg.resolution.data = grid_res
+    msg_pub.publish(area_msg)
+    #log_info(f"{area_msg}")
     
     while not rospy.is_shutdown():
         rate.sleep()
-        msg_pub.publish(msg)
+        msg_pub.publish(area_msg)
+        norm_pub.publish(norm_msg)
     #rospy.spin()
 
 

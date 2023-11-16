@@ -10,7 +10,7 @@
         <param name="namespace" value="$(arg namespace)" />
         <param name="debug" value="true" />
 
-	<node name="explorer_script" pkg="kios_solution" type="explorer.py"  output="screen"/>
+	<node name="explorer_script" pkg="kios_solution" type="explorer_path.py"  output="screen"/>
     </group>
     
 </launch>

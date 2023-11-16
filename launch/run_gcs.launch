@@ -10,7 +10,7 @@
         <param name="namespace" value="$(arg namespace)" />
         <param name="debug" value="true" />
 
-	<node name="gcs_script" pkg="kios_solution" type="gcs.py"  output="screen"/>
+	<node name="explorer_path" pkg="kios_solution" type="gcs.py"  output="screen"/>
     </group>
     
 </launch>

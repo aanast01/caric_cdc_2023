@@ -20,10 +20,10 @@
         <param name="debug" value="true" />
         
         <node pkg="octomap_server" type="octomap_server_node" name="octomap_server_$(arg namespace)">
-		<param name="resolution" value="6" />
+		    <param name="resolution" value="6" />
 		
-		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
-		<param name="frame_id" type="string" value="world" />
+            <!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
+            <param name="frame_id" type="string" value="world" />
 
             <param name="sensor_model/hit" value="1.0" />
             <param name="sensor_model/miss" value="0.3" />
@@ -42,7 +42,7 @@
     	</node>
 
 		<!-- <node name="init_flight" pkg="kios_solution" type="test_flight.py"  output="screen"/> -->
-		<!-- <node name="mpc_controller" pkg="kios_solution" type="mpc_implementation.py"  output="screen"/> -->
+		<node name="explorer_script" pkg="kios_solution" type="explorer.py"  output="screen"/>
     </group>
     
     <group ns="raffles">
@@ -53,10 +53,10 @@
         <param name="debug" value="false" />
 
         <node pkg="octomap_server" type="octomap_server_node" name="octomap_server_$(arg namespace)">
-		<param name="resolution" value="6" />
-		
-		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
-		<param name="frame_id" type="string" value="world" />
+            <param name="resolution" value="6" />
+            
+            <!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
+            <param name="frame_id" type="string" value="world" />
 
             <param name="sensor_model/hit" value="1.0" />
             <param name="sensor_model/miss" value="0.1" />
@@ -75,7 +75,7 @@
     	</node>
     	
     	<!-- <node name="init_flight" pkg="kios_solution" type="test_flight.py"  output="screen" /> -->
-	    <!-- <node name="mpc_controller" pkg="kios_solution" type="mpc_implementation.py"  output="screen"/> -->
+	    <node name="explorer_script" pkg="kios_solution" type="explorer.py"  output="screen"/>
     </group>
     
     
