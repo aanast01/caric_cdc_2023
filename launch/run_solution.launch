@@ -105,10 +105,11 @@
             <param name="namespace" value="$(arg namespace)" />
             <param name="scenario" value="$(arg scenario)" />
             <param name="grid_resolution" value="$(arg grid_resolution)" />
-            <param name="debug" value="false" />
+            <param name="debug" value="true" />
 
             <node name="fov_control" pkg="kios_solution" type="uav_fov.py"  output="screen"/>
-
+            <node name="photographer_trajectory" pkg="kios_solution" type="photographer.py"  output="screen"/>
+            <node name="photographer_path" pkg="kios_solution" type="photographer_path.py"  output="screen"/>
         </group>
     </group>
 
@@ -117,10 +118,11 @@
         <param name="namespace" value="$(arg namespace)" />
         <param name="scenario" value="$(arg scenario)" />
         <param name="grid_resolution" value="$(arg grid_resolution)" />
-        <param name="debug" value="false" />
+        <param name="debug" value="true" />
 
         <node name="fov_control" pkg="kios_solution" type="uav_fov.py"  output="screen"/>
-
+        <node name="photographer_trajectory" pkg="kios_solution" type="photographer.py"  output="screen"/>
+        <node name="photographer_path" pkg="kios_solution" type="photographer_path.py"  output="screen"/>
     </group>
     
 
@@ -129,10 +131,11 @@
         <param name="namespace" value="$(arg namespace)" />
         <param name="scenario" value="$(arg scenario)" />
         <param name="grid_resolution" value="$(arg grid_resolution)" />
-        <param name="debug" value="false" />
+        <param name="debug" value="true" />
 
         <node name="fov_control" pkg="kios_solution" type="uav_fov.py"  output="screen"/>
-
+        <node name="photographer_trajectory" pkg="kios_solution" type="photographer.py"  output="screen"/>
+        <node name="photographer_path" pkg="kios_solution" type="photographer_path.py"  output="screen"/>
     </group>
     
     <!-- For visualization -->

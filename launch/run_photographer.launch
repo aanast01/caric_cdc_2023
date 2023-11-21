@@ -1,7 +1,7 @@
 <launch>
 
     <arg name="scenario" default="mbs" />
-    <arg name="drone" default="jurong" />
+    <arg name="drone" default="sentosa" />
 
     <group ns="$(arg drone)">
         
@@ -10,7 +10,7 @@
         <param name="namespace" value="$(arg namespace)" />
         <param name="debug" value="true" />
 
-	<node name="explorer_script" pkg="kios_solution" type="explorer_path.py"  output="screen"/>
+	<node name="photographer_script" pkg="kios_solution" type="photographer_path.py"  output="screen"/>
     </group>
     
 </launch>

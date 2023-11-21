@@ -92,7 +92,7 @@ def main():
         namespace = "ERROR"
         scenario = 'mbs'
         debug = True
-        set_tag("[" + namespace.upper() + " SCRIPT]: ")
+        set_tag("[" + namespace.upper() + " FOV SCRIPT]: ")
 		
     rospy.init_node(namespace, anonymous=True)
     log_info(namespace)
@@ -127,9 +127,7 @@ def main():
         pitch_pos, yaw_pos  = vec_to_eurler(normal_direction_position)
         pitch_tar, yaw_tar  = vec_to_eurler(normal_direction_target)
 
-
         pitch = (pitch_pos + pitch_tar) / 2
-
         yaw = (yaw_pos + yaw_tar) / 2
         #print("pos: ", yaw_pos, "  tar: ", yaw_tar, "  fin: ", yaw)
 

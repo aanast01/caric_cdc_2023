@@ -89,3 +89,5 @@ catkin_install_python(PROGRAMS scripts/gcs.py DESTINATION ${CATKIN_PACKAGE_BIN_D
 catkin_install_python(PROGRAMS scripts/explorer.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 catkin_install_python(PROGRAMS scripts/uav_fov.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 catkin_install_python(PROGRAMS scripts/explorer_path.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+catkin_install_python(PROGRAMS scripts/photographer.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+catkin_install_python(PROGRAMS scripts/photographer_path.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

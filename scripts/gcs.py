@@ -2,6 +2,7 @@
 #### Created By Kios ####
 ##### 10 Nov 2023 #####
 import rospy
+from std_msgs.msg import String
 from gazebo_msgs.srv import GetModelState
 from sensor_msgs.msg import PointCloud, PointCloud2
 import sensor_msgs.point_cloud2
@@ -264,16 +265,18 @@ def main():
     # Register the topic with ppcom router
     response = create_ppcom_topic('gcs', ['all'], '/world_coords', 'kios_solution', 'area')
     response = create_ppcom_topic('gcs', ['all'], '/norms', 'kios_solution', 'norms')
-    response = create_ppcom_topic('gcs', ['jurong'], '/jurong_waypoints', 'kios_solution', 'multiPoint')
-    response = create_ppcom_topic('gcs', ['raffles'], '/raffles_waypoints', 'kios_solution', 'multiPoint')
+    response = create_ppcom_topic('gcs', ['all'], '/waypoints', 'std_msgs', 'String')
+    # response = create_ppcom_topic('gcs', ['jurong'], '/jurong_waypoints', 'kios_solution', 'multiPoint')
+    # response = create_ppcom_topic('gcs', ['raffles'], '/raffles_waypoints', 'kios_solution', 'multiPoint')
     # Create the publisher
     # coords pub
     msg_pub = rospy.Publisher('/world_coords', area, queue_size=1)
     # norm pub
     norm_pub = rospy.Publisher('/norms', norms, queue_size=1)
     # Explorers' Waypoints
-    jurong_waypoints_pub = rospy.Publisher('/jurong_waypoints',multiPoint, queue_size=1)
-    raffles_waypoints_pub = rospy.Publisher('/raffles_waypoints',multiPoint, queue_size=1)
+    # jurong_waypoints_pub = rospy.Publisher('/jurong_waypoints',multiPoint, queue_size=1)
+    # raffles_waypoints_pub = rospy.Publisher('/raffles_waypoints',multiPoint, queue_size=1)
+    waypoints_pub = rospy.Publisher('/waypoints',String, queue_size=1)
 
     # Get Bounding Box Verticies
     bboxes = rospy.wait_for_message("/gcs/bounding_box_vertices/", PointCloud)
@@ -300,18 +303,11 @@ def main():
     area_msg.size.z = size_z
     area_msg.resolution.data = grid_res
     msg_pub.publish(area_msg)
-    #log_info(f"{area_msg}")
-
-
-
+    
     # find inspection target points
     log_info("Calculating waypoints based on bounding boxes")
-    neighbor_positions = sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)
-    num_of_agents = 2
-    if scenario == 'hangar':
-        num_of_agents = 1
 
-    num_of_nodes = len(bboxes.points) + num_of_agents
+    num_of_nodes = len(bboxes.points) #+ num_of_agents
 
     bbox_points = np.zeros((int(len(bboxes.points)/8),8,3))
     facet_mids = []
@@ -361,55 +357,22 @@ def main():
         cleared_inspect_points[box_i] = np.unique(inspect_points[box_i], axis=0)
 
     cleared_inspect_points = np.delete(cleared_inspect_points,9, axis=1)
+    points = cleared_inspect_points
     # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_points.csv",cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
-    # print(inspect_points)
-
-    neighbor_points = np.zeros((num_of_agents,3))
-    for i, point in enumerate(neighbor_positions):
-        neighbor_points[i,0] = point[0]
-        neighbor_points[i,1] = point[1]
-        neighbor_points[i,2] = point[2]
-        if i == num_of_agents-1:
-            break
-        
-    points = np.concatenate((neighbor_points, cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3)))
-
-    log_info("Calculating cost matrix")
-    adjacency = np.zeros((num_of_nodes,num_of_nodes))
-    for i in range(num_of_nodes):
-        for j in range(num_of_nodes):
-            adjacency[i,j] = euclidean_distance_3d(points[i],points[j])
-
-    # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_cost_matrix.csv", adjacency, delimiter=",")
-    # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_drones.csv", [i for i in range(num_of_agents)], delimiter=",")
-
-    log_info("Running mTSP")
-    waypointsMatrix = calculateCircuits([i for i in range(num_of_agents)], num_of_nodes, adjacency)
-
-    jurong_waypoints_msg = multiPoint()
-    raffles_waypoints_msg = multiPoint()
-    for i in range(num_of_agents):
-        for waypoint in waypointsMatrix[i]:
-            point = Point()
-            point.x = points[waypoint,0]
-            point.y = points[waypoint,1]
-            point.z = points[waypoint,2]
-
-            if i == 0:
-                jurong_waypoints_msg.points.append(point)
-            else:
-                raffles_waypoints_msg.points.append(point)
-            
+ 
+    log_info("Sending waypoints")
+ 
+    filename = "./"+namespace+"_waypoints.csv"
+    np.savetxt(filename, cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
+    str_msg = String()
+    str_msg.data = filename
 
     log_info("DONE")
     while not rospy.is_shutdown():
         rate.sleep()
         msg_pub.publish(area_msg)
         norm_pub.publish(norm_msg)
-        jurong_waypoints_pub.publish(jurong_waypoints_msg)
-        raffles_waypoints_pub.publish(raffles_waypoints_msg)
-    #rospy.spin()
-
+        waypoints_pub.publish(str_msg)
 
 if __name__ == '__main__':
     try:

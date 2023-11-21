@@ -1,6 +1,6 @@
-### Explorer Path Planning Code ###
+### Photographer Path Planning Code ###
 #### Created By Kios ####
-##### 16 Nov 2023 #####
+##### 21 Nov 2023 #####
 import sys
 import rospy
 from std_msgs.msg import String, Bool
@@ -14,7 +14,6 @@ from visualization_msgs.msg import MarkerArray
 import numpy as np
 import math
 
-build_map = True
 repeat = True
 debug = False
 TAG = ""
@@ -92,42 +91,6 @@ def euclidean_distance(p1,point):
     p2[2] = point.z
     return math.sqrt( math.pow(p1[0]-p2[0],2) + math.pow(p1[1]-p2[1],2) + math.pow(p1[2]-p2[2],2))
 
-def process_boxes(msg):
-    global debug
-    points = msg.points
-    minx = 99999
-    miny = 99999
-    minz = 99999
-    maxx = -99999
-    maxy = -99999
-    maxz = -99999
-    for point in points:
-        if minx > point.x:
-            #print("min x: " + str(point.x))
-            minx = point.x
-        if maxx < point.x:
-            #print("max x: " + str(point.x))
-            maxx = point.x
-
-        if miny > point.y:
-            #print("min y: " + str(point.y))
-            miny = point.y
-        if maxy < point.y:
-            #print("max y: " + str(point.y))
-            maxy = point.y
-
-        if minz > point.z:
-            #print("min z: " + str(point.z))
-            minz = point.z
-        if maxz < point.z:
-            #print("max z: " + str(point.z))
-            maxz = point.z
-
-    #if debug:
-    #    print("min x: " + str(minx) + " max x: " + str(maxx) + "\nmin y: " + str(miny) + " max y: " + str(maxy) + "\nmin z: " + str(minz) + " max z: " + str(maxz))
-
-    return [minx, maxx, miny, maxy, minz, maxz]
-
 def euclidean_distance_3d(p1,p2):
     return math.sqrt( math.pow(p1[0]-p2[0],2) + math.pow(p1[1]-p2[1],2) + math.pow(p1[2]-p2[2],2))
 
@@ -161,113 +124,13 @@ def main():
     # target point publisher
     target_pub = rospy.Publisher("/"+namespace+"/command/targetPoint", Point, queue_size=1)
 
-     # Wait for service to appear
-    log_info("Waiting for ppcom")
-    rospy.wait_for_service('/create_ppcom_topic')
-    # Create a service proxy
-    create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
-    # Register the topic with ppcom router
-    if namespace == 'jurong':
-        response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
-    else:
-        response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
-
-    # update flag publisher
-    flag_pub = rospy.Publisher("/"+namespace+"/command/update", Bool, queue_size=1, latch=False)
-
-    # Get inspection area details
-    log_info("Waiting for area details")
-    area_details = rospy.wait_for_message("/world_coords/"+namespace, area)
-
-    min_x = area_details.minPoint.x
-    max_x = int(area_details.minPoint.x + area_details.size.x * area_details.resolution.data)
-    mid_x = (min_x + max_x)/2.0
-
-    min_y = area_details.minPoint.y
-    max_y = int(area_details.minPoint.y + area_details.size.y * area_details.resolution.data)
-    mid_y = (min_y + max_y)/2.0
-
-    min_z = area_details.minPoint.z
-    max_z = int(area_details.minPoint.z + area_details.size.z * area_details.resolution.data)
-    mid_z = ((min_z + max_z)/2.0)
+    filename_msg = rospy.wait_for_message("/waypoints/"+namespace, String)
     
-    if scenario != 'hangar':
-        # if x dimension is longest
-        if (max_x >= max_y) and (max_x >= max_z):
-            target_points_jurong = np.array([[min_x, max_y, mid_z],
-                                                [max_x, max_y, mid_z]])
-            
-            target_points_raffles = np.array([[min_x, min_y, mid_z],
-                                                [max_x, min_y, mid_z]])
-        # if y dimension is longest
-        elif (max_y >= max_x) and (max_y >= max_z):
-            target_points_jurong = np.array([[min_x, min_y, mid_z],
-                                                [min_x, max_y, mid_z]])
-            
-            target_points_raffles = np.array([[max_x, min_y, mid_z],
-                                                [max_x, max_y, mid_z]])
-        # if z dimension is longest
-        elif (max_z >= max_x) and (max_z >= max_y):
-            # if x dimension is longer than y
-            if (max_x >= max_y):
-                target_points_jurong = np.array([[mid_x, min_y, mid_z],
-                                                    [mid_x, min_y, max_z]])
-                
-                target_points_raffles = np.array([[mid_x, max_y, mid_z],
-                                                    [mid_x, max_y, max_z]])
-                
-            # if y dimension is longer than x
-            else: 
-                target_points_jurong = np.array([[min_x, mid_y, mid_z],
-                                                [min_x, mid_y, max_z]])
-            
-                target_points_raffles = np.array([[max_x, mid_y, mid_z],
-                                                    [max_x, mid_y, max_z]])
-    else:
-        target_points_jurong = np.array([[mid_x, max_y, max_z],
-                                         [mid_x, min_y, max_z]])
-
-    if drone_IDs[namespace] == drone_IDs['jurong']:
-        target_points = target_points_jurong
-    else:
-        target_points = target_points_raffles
-
-    log_info("Waiting for adjacency build")
-    rospy.wait_for_message("/"+namespace+"/adjacency_viz", MarkerArray)
+    log_info("Waiting for traj script")
+    rospy.wait_for_message("/"+namespace+"/arrived_at_target", Bool)
     init_pos = position
     rate.sleep()
 
-    filename_msg = rospy.wait_for_message("/waypoints/"+namespace, String)
-
-    if build_map:
-        # go to initial points for map building
-        for point in target_points:
-            target_msg = Point()
-            target_msg.x = point[0]
-            target_msg.y = point[1]
-            target_msg.z = point[2]
-            log_info("Setting target to point: " + str(point))
-            while not arrived:              #(euclidean_distance(point,position) >= area_details.resolution.data):
-                #log_info(euclidean_distance(point,position))
-                target_pub.publish(target_msg)
-                rate.sleep()
-            arrived = False
-
-        bool_msg = Bool()
-        bool_msg.data = True
-        flag_pub.publish(bool_msg)
-        rate.sleep()
-
-        log_info("Waiting for map merge to complete")
-        # wait for neighbor update flag
-        if namespace == 'jurong':
-            if scenario != 'hangar':
-                rospy.wait_for_message("/"+namespace+"/command/update", Bool)
-                #rospy.wait_for_message("/raffles/command/update/"+namespace, Bool)
-        else:
-            rospy.wait_for_message("/"+namespace+"/command/update", Bool)
-            #rospy.wait_for_message("/jurong/command/update/"+namespace, Bool)
-        
 
     # Generate and go to TSP points
     log_info("Loading waypoints")
@@ -278,11 +141,11 @@ def main():
         uav_indices = np.array([])
         for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
             if point[3] != drone_IDs['gcs']:
-                log_info(point[3])
                 uav_positions = np.append(uav_positions, [[point[0], point[1], point[2]]], axis=0)
                 uav_indices = np.append(uav_indices, point[3])
+
         pos = 0
-        while uav_indices[pos] < drone_IDs[namespace]:
+        while (pos < len(uav_indices)) and (uav_indices[pos] < drone_IDs[namespace]):
             pos += 1
         
         uav_positions = np.insert(uav_positions, pos, [position.x, position.y, position.z], axis=0)
@@ -298,9 +161,6 @@ def main():
         for i in range(num_of_nodes):
             for j in range(num_of_nodes):
                 adjacency[i,j] = euclidean_distance_3d(points[i],points[j])
-
-
-        
 
         log_info("Running mTSP")
 
@@ -329,13 +189,7 @@ def main():
     
     while not rospy.is_shutdown():
         log_info("Finished")
-        flag_pub.publish(bool_msg)
         rate.sleep()
-
-
-
-
-
 
 if __name__ == '__main__':
     try:

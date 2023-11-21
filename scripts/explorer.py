@@ -2,7 +2,7 @@
 #### Created By Kios ####
 ##### 13 Nov 2023 #####
 import rospy
-from std_msgs.msg import Header, Float32, Bool
+from std_msgs.msg import Header, Float32, Bool, String
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs.point_cloud2
@@ -25,11 +25,11 @@ def dijkstra(g, arrival_pub, s, t):
         arrived_msg = Bool()
         arrived_msg.data = True
         arrival_pub.publish(arrived_msg)
-        log_info("ARRIVED")
+        # log_info("ARRIVED")
         return [s,s]
     
     if (len(np.nonzero(g[s,:])[0]) == 0) or (len(np.nonzero(g[:,t])[0]) == 0):
-        log_info("Target" + str(t) + " not reachable")
+        log_info("Target " + str(t) + " not reachable")
         return [s,s]
     
     q = []
@@ -75,7 +75,7 @@ def generate_path(parents, start, end):
         #log_info("Returning path")
         return path
 
-maxVel = 2.0
+maxVel = 3.0
 debug = False
 TAG = ""
 odom = Odometry()
@@ -128,7 +128,7 @@ def yawCallback(msg):
 def neighCallback(msg):
     global neighbors
     neighbors = msg
-
+    
 def euclidean_distance_3d(p1,p2):
     return math.sqrt( math.pow(p1[0]-p2[0],2) + math.pow(p1[1]-p2[1],2) + math.pow(p1[2]-p2[2],2))
 
@@ -170,7 +170,7 @@ def constuct_adjacency(area_details, coordinates):
 
     return adjacency_1
 
-def update_adjacency(adjacency, coordinates, obstacle_coordinates):    
+def update_adjacency(adjacency, coordinates, obstacle_coordinates, update_neighboors):    
     global grid_resolution
     adjacency_temp = np.copy(adjacency)
     # for _, obstacle in enumerate(obstacle_coordinates.points):
@@ -182,20 +182,38 @@ def update_adjacency(adjacency, coordinates, obstacle_coordinates):
         # if np.linalg.norm([delta_x,delta_y,delta_z]) < grid_resolution:
         adjacency_temp[:,index] = 0
 
-    update_adjacency_with_neighbors(adjacency)
+    if update_neighboors:
+        adjacency_temp = update_adjacency_with_neighbors(adjacency_temp)
 
     return adjacency_temp
 
 def update_adjacency_with_neighbors(adjacency):
-    global neighbors, grid_resolution
+    global neighbors, grid_resolution, coordinates, area_details
 
     adjacency_temp = np.copy(adjacency)
     for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
-        index = closest_node_index_1((point[0], point[1], point[2]), coordinates)
-        adjacency_temp[:,index]=0
+        if point[3] != 0:
+            index = closest_node_index_1((point[0], point[1], point[2]), coordinates)
+            adjacency_temp[:,index]=0
+            for _, offset in enumerate(offsets_cross):
+                neighbor_x = coordinates[index][0]+(offset[0] * grid_resolution)
+                neighbor_y = coordinates[index][1]+(offset[1] * grid_resolution)
+                neighbor_z = coordinates[index][2]+(offset[2] * grid_resolution)
+            
+                
+                gone_too_far_x = (neighbor_x < area_details.minPoint.x) or (neighbor_x > (area_details.minPoint.x + area_details.size.x*area_details.resolution.data))
+                gone_too_far_y = (neighbor_y < area_details.minPoint.y) or (neighbor_y > (area_details.minPoint.y + area_details.size.y*area_details.resolution.data))
+                gone_too_far_z = (neighbor_z < area_details.minPoint.z) or (neighbor_z > (area_details.minPoint.z + area_details.size.z*area_details.resolution.data))
+                if gone_too_far_x or gone_too_far_y or gone_too_far_z:
+                    #log_info(f"{gone_too_far_x}, {gone_too_far_y}, {gone_too_far_z}")
+                    continue
+                
+                
+                neighbor_index = closest_node_index_1((neighbor_x, neighbor_y, neighbor_z),coordinates)
+                adjacency_temp[:,neighbor_index]=0
 
     arr = np.sum(adjacency, axis=1)
-    isolated_indicies = np.where(arr <= grid_resolution*2)[0]
+    isolated_indicies = np.where(arr <= grid_resolution)[0]
     for _, index in enumerate(isolated_indicies):
         #log_info("ISOLATED NODE: " + str(coordinates[index]))
         adjacency_temp[:,index] = 0
@@ -206,6 +224,7 @@ def update_from_neighbor(coordinates):
     global adjacency, update, namespace, mutex, adjacency_final
     log_info("waiting for update command")
     flag_pub = rospy.Publisher("/"+namespace+"/command/update", Bool, queue_size=1, latch=False)
+    adj_pub = rospy.Publisher("/"+namespace+"/adjacency", String, queue_size=1, latch=False)
     
     rospy.wait_for_message("/"+namespace+"/command/update", Bool)
     rate = rospy.Rate(1)
@@ -226,11 +245,16 @@ def update_from_neighbor(coordinates):
     log_info("Acquiring mutex")
     mutex.acquire()
     log_info("Merging map")
-    adjacency_final = update_adjacency(adjacency, coordinates, occupancy_coords)
+    adjacency_final = update_adjacency(adjacency, coordinates, occupancy_coords, False)
     mutex.release()
     log_info("Merging DONE")
+    filename = "./"+namespace+"_adjacency.csv"
+    np.savetxt(filename, adjacency_final, delimiter=",")
+    filename_str = String()
+    filename_str.data = filename
     while not rospy.is_shutdown():
         flag_pub.publish(True)
+        adj_pub.publish(filename_str)
         rate.sleep
 
 def get_node_index(coordinates, x,y,z):
@@ -416,6 +440,30 @@ def publish_graph_viz(pub, coords, adj):
             marker.pose.position.y = coord[1]
             marker.pose.position.z = coord[2]
             marker_array.markers.append(marker)
+        elif sum(adj[indx,:]) == 0:
+            marker = Marker()
+            marker.header.frame_id = "world"
+            marker.type = marker.CUBE
+            marker.action = marker.ADD
+            marker.scale.x = grid_resolution
+            marker.scale.y = grid_resolution
+            marker.scale.z = grid_resolution
+            #marker.color.a = 0.05
+            #index = closest_node_index(coord,coords)
+            
+            marker.color.r = 1.0
+            marker.color.g = 0.0
+            marker.color.b = 1.0
+            marker.color.a = 0.5
+            # else:
+            #     marker.color.r = 1.0
+            #     marker.color.g = 1.0
+            #     marker.color.b = 1.0
+            marker.pose.orientation.w = 1.0
+            marker.pose.position.x = coord[0]
+            marker.pose.position.y = coord[1]
+            marker.pose.position.z = coord[2]
+            marker_array.markers.append(marker)
 
     marker = Marker()
     marker.header.frame_id = "world"
@@ -447,7 +495,7 @@ def publish_graph_viz(pub, coords, adj):
 
 def main():
     # init
-    global cmdPub, waypoint, command_thread, coordinates, target, grid_resolution, namespace, debug, adjacency, update, mutex, adjacency_final
+    global cmdPub, waypoint, command_thread, coordinates, target, grid_resolution, namespace, debug, adjacency, update, mutex, adjacency_final, area_details
     try:
         namespace = rospy.get_param('namespace') # node_name/argsname
         scenario = rospy.get_param('scenario')
@@ -460,7 +508,7 @@ def main():
         namespace = "jurong"
         scenario = 'mbs'
         debug = True
-        set_tag("[" + namespace.upper() + " SCRIPT]: ")
+        set_tag("[" + namespace.upper() + " TRAJ SCRIPT]: ")
 		
     rospy.init_node(namespace, anonymous=True)
     log_info(namespace)
@@ -493,6 +541,8 @@ def main():
     create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
     # Register the topic with ppcom router
     response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/occupancy_coords', 'sensor_msgs', 'PointCloud2')
+    response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/adjacency', 'std_msgs', 'String')
+    
     if namespace == 'jurong':
         response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
     else:
@@ -516,9 +566,10 @@ def main():
 
     # Constructing the graph
     log_info("Constructing initial graph")
-    nodes = [i for i in range(num_of_nodes)]
+    # nodes = [i for i in range(num_of_nodes)]
     #nodes_int = [i for i in range(num_of_nodes)]
     coordinates = [(x,y,z) for x in xrange for y in yrange for z in zrange]
+    np.savetxt("./"+namespace+"_coordinates.csv", coordinates, delimiter=",")
     start = time.time()
     adjacency_org = constuct_adjacency(area_details, coordinates)
     duration = time.time() - start
@@ -540,7 +591,7 @@ def main():
     occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
 
 
-    adjacency = update_adjacency(adjacency_org, coordinates, occupancy_coords)
+    adjacency = update_adjacency(adjacency_org, coordinates, occupancy_coords, True)
     publish_graph_viz(viz_pub, coordinates, adjacency)
 
     waypoint = (odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z)
@@ -595,7 +646,7 @@ def main():
         if update:
             log_info("Updating map")
             mutex.acquire()
-            adjacency = update_adjacency(adjacency_org,coordinates, occupancy_coords)
+            adjacency = update_adjacency(adjacency_org,coordinates, occupancy_coords, True)
             mutex.release()
         else:
             mutex.acquire()
