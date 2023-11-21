@@ -170,7 +170,7 @@ def constuct_adjacency(area_details, coordinates):
 
     return adjacency_1
 
-def update_adjacency(adjacency, coordinates, obstacle_coordinates, update_neighboors):    
+def update_adjacency(adjacency, coordinates, obstacle_coordinates):    
     global grid_resolution
     adjacency_temp = np.copy(adjacency)
     # for _, obstacle in enumerate(obstacle_coordinates.points):
@@ -182,10 +182,9 @@ def update_adjacency(adjacency, coordinates, obstacle_coordinates, update_neighb
         # if np.linalg.norm([delta_x,delta_y,delta_z]) < grid_resolution:
         adjacency_temp[:,index] = 0
 
-    if update_neighboors:
-        adjacency_temp = update_adjacency_with_neighbors(adjacency_temp)
+    adjacency_neigh = update_adjacency_with_neighbors(adjacency_temp)
 
-    return adjacency_temp
+    return adjacency_temp, adjacency_neigh
 
 def update_adjacency_with_neighbors(adjacency):
     global neighbors, grid_resolution, coordinates, area_details
@@ -212,7 +211,7 @@ def update_adjacency_with_neighbors(adjacency):
                 neighbor_index = closest_node_index_1((neighbor_x, neighbor_y, neighbor_z),coordinates)
                 adjacency_temp[:,neighbor_index]=0
 
-    arr = np.sum(adjacency, axis=1)
+    arr = np.sum(adjacency_temp, axis=1)
     isolated_indicies = np.where(arr <= grid_resolution)[0]
     for _, index in enumerate(isolated_indicies):
         #log_info("ISOLATED NODE: " + str(coordinates[index]))
@@ -223,8 +222,8 @@ def update_adjacency_with_neighbors(adjacency):
 def update_from_neighbor(coordinates):
     global adjacency, update, namespace, mutex, adjacency_final
     log_info("waiting for update command")
-    flag_pub = rospy.Publisher("/"+namespace+"/command/update", Bool, queue_size=1, latch=False)
-    adj_pub = rospy.Publisher("/"+namespace+"/adjacency", String, queue_size=1, latch=False)
+    flag_pub = rospy.Publisher("/"+namespace+"/command/update_done", Bool, queue_size=1, latch=True)
+    adj_pub = rospy.Publisher("/"+namespace+"/adjacency", String, queue_size=1, latch=True)
     
     rospy.wait_for_message("/"+namespace+"/command/update", Bool)
     rate = rospy.Rate(1)
@@ -234,8 +233,10 @@ def update_from_neighbor(coordinates):
     while len(occupancy_coords.data) == 0:
         try:
             if namespace == 'jurong':
+                rospy.wait_for_message("/raffles/command/update/"+namespace, Bool,1)
                 occupancy_coords = rospy.wait_for_message('/raffles/occupancy_coords/'+namespace, PointCloud2, 1)
             else:
+                rospy.wait_for_message("/jurong/command/update/"+namespace, Bool,1)
                 occupancy_coords = rospy.wait_for_message('/jurong/occupancy_coords/'+namespace, PointCloud2, 1)
         except rospy.exceptions.ROSException as e:
             log_info("Waiting for neighbor map")
@@ -245,15 +246,19 @@ def update_from_neighbor(coordinates):
     log_info("Acquiring mutex")
     mutex.acquire()
     log_info("Merging map")
-    adjacency_final = update_adjacency(adjacency, coordinates, occupancy_coords, False)
+    adjacency_final, _ = update_adjacency(adjacency, coordinates, occupancy_coords)
+    occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
+    adjacency_final, _ = update_adjacency(adjacency_final, coordinates, occupancy_coords)
     mutex.release()
     log_info("Merging DONE")
     filename = "./"+namespace+"_adjacency.csv"
     np.savetxt(filename, adjacency_final, delimiter=",")
     filename_str = String()
     filename_str.data = filename
+    bool_msg = Bool()
+    bool_msg.data = True
     while not rospy.is_shutdown():
-        flag_pub.publish(True)
+        flag_pub.publish(bool_msg)
         adj_pub.publish(filename_str)
         rate.sleep
 
@@ -544,9 +549,9 @@ def main():
     response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/adjacency', 'std_msgs', 'String')
     
     if namespace == 'jurong':
-        response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
+        response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
     else:
-        response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
+        response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
 
 
     # log_info(response)
@@ -591,7 +596,7 @@ def main():
     occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
 
 
-    adjacency = update_adjacency(adjacency_org, coordinates, occupancy_coords, True)
+    adjacency, adjacency_neigh = update_adjacency(adjacency_org, coordinates, occupancy_coords)
     publish_graph_viz(viz_pub, coordinates, adjacency)
 
     waypoint = (odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z)
@@ -622,7 +627,7 @@ def main():
     while not rospy.is_shutdown():
         agent_index = closest_node_index_1(([odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z]),coordinates)
         #log_info("Generating path. Starting Point: " + str(agent_index) + " Target Point: " + str(target))
-        path = dijkstra(adjacency, arrival_pub, agent_index, target)
+        path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
         #log_info("Going to point: " + str(coordinates[path[1]]))
         waypoint = coordinates[path[1]]
         #while (euclidean_distance_3d([odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z],coordinates[path[1]]) > area_details.resolution.data/4):
@@ -646,15 +651,17 @@ def main():
         if update:
             log_info("Updating map")
             mutex.acquire()
-            adjacency = update_adjacency(adjacency_org,coordinates, occupancy_coords, True)
+            adjacency, adjacency_neigh = update_adjacency(adjacency_org,coordinates, occupancy_coords)
+            publish_graph_viz(viz_pub, coordinates, adjacency)
             mutex.release()
         else:
             mutex.acquire()
             # adjacency = update_adjacency(adjacency_final,coordinates, occupancy_coords)
-            adjacency = update_adjacency_with_neighbors(adjacency_final)
+            adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
+            publish_graph_viz(viz_pub, coordinates, adjacency_final)
             mutex.release()
 
-        publish_graph_viz(viz_pub, coordinates, adjacency)
+        
         
         
 if __name__ == '__main__':

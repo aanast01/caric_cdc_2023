@@ -257,16 +257,28 @@ def main():
         bool_msg.data = True
         flag_pub.publish(bool_msg)
         rate.sleep()
-
+        update_done = False
         log_info("Waiting for map merge to complete")
         # wait for neighbor update flag
         if namespace == 'jurong':
             if scenario != 'hangar':
-                rospy.wait_for_message("/"+namespace+"/command/update", Bool)
-                #rospy.wait_for_message("/raffles/command/update/"+namespace, Bool)
+                while not update_done:
+                    try:
+                        flag_pub.publish(bool_msg)
+                        msg = rospy.wait_for_message("/"+namespace+"/command/update_done", Bool,1)
+                        update_done = msg.data
+                    except:
+                        pass
+                    rate.sleep()
         else:
-            rospy.wait_for_message("/"+namespace+"/command/update", Bool)
-            #rospy.wait_for_message("/jurong/command/update/"+namespace, Bool)
+            while not update_done:
+                try:
+                    flag_pub.publish(bool_msg)
+                    msg = rospy.wait_for_message("/"+namespace+"/command/update_done", Bool,1)
+                    update_done = msg.data
+                except:
+                    pass
+                rate.sleep()
         
 
     # Generate and go to TSP points

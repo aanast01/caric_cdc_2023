@@ -124,11 +124,11 @@ def main():
         normal_direction_target = normals_msg.normals[target]
 
         #print(normal_direction)
-        pitch_pos, yaw_pos  = vec_to_eurler(normal_direction_position)
-        pitch_tar, yaw_tar  = vec_to_eurler(normal_direction_target)
+        pitch, yaw  = vec_to_eurler(normal_direction_position)
+        # pitch_tar, yaw_tar  = vec_to_eurler(normal_direction_target)
 
-        pitch = (pitch_pos + pitch_tar) / 2
-        yaw = (yaw_pos + yaw_tar) / 2
+        # pitch = (pitch_pos + pitch_tar) / 2
+        # yaw = (yaw_pos + yaw_tar) / 2
         #print("pos: ", yaw_pos, "  tar: ", yaw_tar, "  fin: ", yaw)
 
         # if abs(pitch) <= 0.5:
