@@ -7,10 +7,48 @@ from sensor_msgs.msg import PointCloud, PointCloud2
 import sensor_msgs.point_cloud2
 from nav_msgs.msg import Odometry
 from caric_mission.srv import CreatePPComTopic
-from kios_solution.msg import area, norms
+from kios_solution.msg import area, norms, multiPoint
 from geometry_msgs.msg import Point
-from scipy.spatial import Delaunay, ConvexHull
+from scipy.spatial import Delaunay
 import numpy as np
+import sys
+import math
+
+def calculateCircuits(positions, num_of_nodes, TravellingCost):
+    UAVs = len(positions)
+    # positions = index where each uav is located
+
+    # Initialization of Set S matrices and CircuitX, CircuitY.
+    Set_S_source = [[] for i in range(0, UAVs)]
+    Set_S_destination = [[] for i in range(0, UAVs)]
+    Set_S_cost = [[] for i in range(0, UAVs)]
+    listV1 = [0 for i in range(0, num_of_nodes)]
+    # print("POSS: ",positions[:])
+    for z in range(0, UAVs):
+        listV1[positions[z]] = 1
+    # print positions
+    # print "before listV: ", listV1
+    # assignment of the first K nodes.
+    while (sum(listV1) < num_of_nodes):
+        for i in range(0, UAVs):
+            node = 0
+            flag = False
+            futureCost = sys.maxsize
+            for j in range(0, num_of_nodes):
+                if (listV1[j] == 0):
+                    if (futureCost >= TravellingCost[positions[i]][j]):
+                        futureCost = TravellingCost[positions[i]][j]
+                        node = j
+                        flag = True
+            if flag:
+                listV1[node] = 1
+                Set_S_source[i].append(positions[i])
+                #Set_S_destination[i].append(positions[i])
+                Set_S_destination[i].append(node)
+                Set_S_cost[i].append(futureCost)
+
+    
+    return Set_S_destination
 
 debug = False
 TAG = ""
@@ -22,8 +60,9 @@ def set_tag(tag):
     TAG = tag
 
 def log_info(info):
-    global TAG
-    rospy.loginfo(TAG + info)
+    global TAG, debug
+    if debug:
+        rospy.loginfo(TAG + info)
     #print(TAG)
 
 def odomCallback(msg):
@@ -116,7 +155,7 @@ def find_world_min_max(msg, min_max):
     if (abs(miny) + abs(maxy))%grid_res!=0:
             maxy += grid_res-(abs(miny) + abs(maxy))%grid_res
 
-    minz = round(max(0,minz-relax))
+    minz = round(max(2.0,minz-relax))
     maxz = round(maxz+relax)
     if (abs(minz) + abs(maxz))%grid_res!=0:
             maxz += grid_res-(abs(minz) + abs(maxz))%grid_res
@@ -124,34 +163,14 @@ def find_world_min_max(msg, min_max):
         #print("\nneighbor x: " + str(x) + " y: " + str(y) + " z: " + str(z))
     return [minx, maxx, miny, maxy, minz, maxz]
 
-def find_norms(bboxes):
+def find_norms(vertices):
     # 3D vertices
-    vertices = np.zeros((len(bboxes.points),3))
-    for i, point in enumerate(reversed(bboxes.points)):
-        vertices[i,0] = point.x
-        vertices[i,1] = point.y
-        vertices[i,2] = point.z
+    # vertices = np.zeros((len(bboxes.points),3))
+    # for i, point in enumerate(reversed(bboxes.points)):
+    #     vertices[i,0] = point.x
+    #     vertices[i,1] = point.y
+    #     vertices[i,2] = point.z
         
-    # Calculate Convex Hull
-    # hull = ConvexHull(vertices)
-    
-    # # Extract facets and their normals
-    # facets = []
-    # facet_normals = []
-    
-    # for simplex in hull.simplices:
-    #     facet = vertices[simplex]
-    #     mid_x = np.mean([facet[0][0], facet[1][0], facet[2][0]])
-    #     mid_y = np.mean([facet[0][1], facet[1][1], facet[2][1]])
-    #     mid_z = np.mean([facet[0][2], facet[1][2], facet[2][2]])
-    #     facet_mid = [mid_x, mid_y, mid_z]
-    #     facets.append(facet_mid)
-    #     # Calculate normal vector for each facet
-    #     normal = np.cross(facet[1] - facet[0], facet[2] - facet[0])
-    #     normal /= np.linalg.norm(normal)
-
-    #     facet_normals.append(normal)
-
     #print(vertices)
     # Create Delaunay triangulation
     DT = Delaunay(vertices)
@@ -193,7 +212,11 @@ def find_norms(bboxes):
 
     return [P, F]
 
-if __name__ == '__main__':
+def euclidean_distance_3d(p1,p2):
+    return math.sqrt( math.pow(p1[0]-p2[0],2) + math.pow(p1[1]-p2[1],2) + math.pow(p1[2]-p2[2],2))
+
+def main():
+    global debug
     # init
     try:
         namespace = rospy.get_param('namespace') # node_name/argsname
@@ -225,6 +248,8 @@ if __name__ == '__main__':
             rospy.loginfo("[TESTING FLIGHT SCRIPT: GET STATE]: " + namespace)
         state = get_state(model_name=namespace)
         rate.sleep()
+    
+    #rospy.sleep(rospy.Duration(10))
         
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
@@ -239,37 +264,28 @@ if __name__ == '__main__':
     # Register the topic with ppcom router
     response = create_ppcom_topic('gcs', ['all'], '/world_coords', 'kios_solution', 'area')
     response = create_ppcom_topic('gcs', ['all'], '/norms', 'kios_solution', 'norms')
+    response = create_ppcom_topic('gcs', ['jurong'], '/jurong_waypoints', 'kios_solution', 'multiPoint')
+    response = create_ppcom_topic('gcs', ['raffles'], '/raffles_waypoints', 'kios_solution', 'multiPoint')
     # Create the publisher
     # coords pub
     msg_pub = rospy.Publisher('/world_coords', area, queue_size=1)
     # norm pub
     norm_pub = rospy.Publisher('/norms', norms, queue_size=1)
+    # Explorers' Waypoints
+    jurong_waypoints_pub = rospy.Publisher('/jurong_waypoints',multiPoint, queue_size=1)
+    raffles_waypoints_pub = rospy.Publisher('/raffles_waypoints',multiPoint, queue_size=1)
 
     # Get Bounding Box Verticies
     bboxes = rospy.wait_for_message("/gcs/bounding_box_vertices/", PointCloud)
     min_max = process_boxes(bboxes)
 
-    [facets, normls] = find_norms(bboxes)
-    norm_msg = norms()
-    for facet, norm in zip(facets, normls):
-        facet_mid = Point()
-        facet_mid.x = facet[0]
-        facet_mid.y = facet[1]
-        facet_mid.z = facet[2]
-        norm_msg.facet_mids.append(facet_mid)
-        norm_point = Point()
-        norm_point.x = norm[0]
-        norm_point.y = norm[1]
-        norm_point.z = norm[2]
-        norm_msg.normals.append(norm_point)
-
-
     # Get Neighbor Positions
+    log_info("Waiting for neighbors positions")
     neighbors = rospy.wait_for_message("/"+namespace+"/nbr_odom_cloud", PointCloud2)
-    
     
     #print(min_max)
     # Calculate discretized world
+    log_info("Calculating discretized world size")
     min_max = find_world_min_max(neighbors, min_max)
     size_x = (abs(min_max[0]) + abs(min_max[1]))/grid_res
     size_y = (abs(min_max[2]) + abs(min_max[3]))/grid_res
@@ -285,11 +301,122 @@ if __name__ == '__main__':
     area_msg.resolution.data = grid_res
     msg_pub.publish(area_msg)
     #log_info(f"{area_msg}")
+
+
+
+    # find inspection target points
+    log_info("Calculating waypoints based on bounding boxes")
+    neighbor_positions = sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)
+    num_of_agents = 2
+    if scenario == 'hangar':
+        num_of_agents = 1
+
+    num_of_nodes = len(bboxes.points) + num_of_agents
+
+    bbox_points = np.zeros((int(len(bboxes.points)/8),8,3))
+    facet_mids = []
+    normal_vectors = []
+    counter = 0
+    for i in range(0,int(len(bboxes.points)/8)):
+        for j in range(8):
+            bbox_points[i,j,0] = bboxes.points[counter].x
+            bbox_points[i,j,1] = bboxes.points[counter].y
+            bbox_points[i,j,2] = bboxes.points[counter].z
+            counter += 1
+
+        # calculate norms
+        [facets, normls] = find_norms(bbox_points[i])
+        facet_mids.append(facets)
+        normal_vectors.append(normls)
+
+    # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_norms.csv",normls, delimiter=",")
+    # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_facet_mids.csv",facets, delimiter=",")
+    norm_msg = norms()
+    for facet, norm in zip(facet_mids, normal_vectors):
+        for i in range(12):
+            facet_mid = Point()
+            facet_mid.x = facet[i,0]
+            facet_mid.y = facet[i,1]
+            facet_mid.z = facet[i,2]
+            norm_msg.facet_mids.append(facet_mid)
+            norm_point = Point()
+            norm_point.x = norm[i,0]
+            norm_point.y = norm[i,1]
+            norm_point.z = norm[i,2]
+            norm_msg.normals.append(norm_point)
     
+    
+    #np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_points.csv",bbox_points.reshape(int(len(bboxes.points)),3), delimiter=",")
+
+    inspect_points = np.zeros((int(len(bboxes.points)/8),28,3))
+    cleared_inspect_points = np.zeros((int(len(bboxes.points)/8),19,3))
+    for box_i in range(0,int(len(bboxes.points)/8)):
+        counter = 0
+        for i in range(8):
+            for j in range(i+1,8):
+                inspect_points[box_i,counter,0] = round((bbox_points[box_i,i,0] + bbox_points[box_i,j,0])/2,4)
+                inspect_points[box_i,counter,1] = round((bbox_points[box_i,i,1] + bbox_points[box_i,j,1])/2,4)
+                inspect_points[box_i,counter,2] = round((bbox_points[box_i,i,2] + bbox_points[box_i,j,2])/2,4)
+                counter += 1
+        cleared_inspect_points[box_i] = np.unique(inspect_points[box_i], axis=0)
+
+    cleared_inspect_points = np.delete(cleared_inspect_points,9, axis=1)
+    # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_points.csv",cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
+    # print(inspect_points)
+
+    neighbor_points = np.zeros((num_of_agents,3))
+    for i, point in enumerate(neighbor_positions):
+        neighbor_points[i,0] = point[0]
+        neighbor_points[i,1] = point[1]
+        neighbor_points[i,2] = point[2]
+        if i == num_of_agents-1:
+            break
+        
+    points = np.concatenate((neighbor_points, cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3)))
+
+    log_info("Calculating cost matrix")
+    adjacency = np.zeros((num_of_nodes,num_of_nodes))
+    for i in range(num_of_nodes):
+        for j in range(num_of_nodes):
+            adjacency[i,j] = euclidean_distance_3d(points[i],points[j])
+
+    # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_cost_matrix.csv", adjacency, delimiter=",")
+    # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_drones.csv", [i for i in range(num_of_agents)], delimiter=",")
+
+    log_info("Running mTSP")
+    waypointsMatrix = calculateCircuits([i for i in range(num_of_agents)], num_of_nodes, adjacency)
+
+    jurong_waypoints_msg = multiPoint()
+    raffles_waypoints_msg = multiPoint()
+    for i in range(num_of_agents):
+        for waypoint in waypointsMatrix[i]:
+            point = Point()
+            point.x = points[waypoint,0]
+            point.y = points[waypoint,1]
+            point.z = points[waypoint,2]
+
+            if i == 0:
+                jurong_waypoints_msg.points.append(point)
+            else:
+                raffles_waypoints_msg.points.append(point)
+            
+
+    log_info("DONE")
     while not rospy.is_shutdown():
         rate.sleep()
         msg_pub.publish(area_msg)
         norm_pub.publish(norm_msg)
+        jurong_waypoints_pub.publish(jurong_waypoints_msg)
+        raffles_waypoints_pub.publish(raffles_waypoints_msg)
     #rospy.spin()
 
 
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("terminating...")
+    except Exception as e:
+        print(e)
+    finally:
+        exit()

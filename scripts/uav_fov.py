@@ -15,9 +15,11 @@ position = Point()
 target = 0
 command_thread = None
 cmdPub = None
-coordinates = None
+normals_msg = None
 grid_resolution = 6
 namespace = "jurong"
+target = 0
+
 
 def set_tag(tag):
     global TAG
@@ -51,8 +53,6 @@ def vec_to_eurler(vector):
     #vector = np.asarray((vector.x, vector.y, vector.z))
     #vector /= np.linalg.norm(vector)
 
-
-
     #print(agent_yaw)
     yaw = np.arctan2(-vector.y, -vector.x)
 
@@ -71,9 +71,15 @@ def vec_to_eurler(vector):
 
     return pitch, yaw
 
+def targetCallback(msg):
+    global target, normals_msg
+    target_point = msg
+    target =  closest_node_index(target_point,normals_msg.facet_mids)
+
+
 def main():
     # init
-    global grid_resolution, namespace, debug, odom, position
+    global grid_resolution, namespace, debug, odom, position, target, normals_msg
     try:
         namespace = rospy.get_param('namespace') # node_name/argsname
         scenario = rospy.get_param('scenario')
@@ -95,6 +101,9 @@ def main():
 
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
+    # subscribe to target point
+    rospy.Subscriber("/"+namespace+"/command/targetPoint", Point, targetCallback)
+
 
     # Get inspection norms
     log_info("Waiting for normals details")
@@ -111,16 +120,25 @@ def main():
     while not rospy.is_shutdown():
         ind = closest_node_index(position, normals_msg.facet_mids)
         #print(normals_msg.facet_mids[ind])
-        normal_direction = normals_msg.normals[ind]
-        #print(normal_direction)
-        pitch, yaw  = vec_to_eurler(normal_direction)
+        normal_direction_position = normals_msg.normals[ind]
+        normal_direction_target = normals_msg.normals[target]
 
-        if abs(pitch) <= 0.5:
-            pitch = 0.0
-        elif pitch > 0:
-            pitch = 1.57
-        else:
-            pitch = -1.57
+        #print(normal_direction)
+        pitch_pos, yaw_pos  = vec_to_eurler(normal_direction_position)
+        pitch_tar, yaw_tar  = vec_to_eurler(normal_direction_target)
+
+
+        pitch = (pitch_pos + pitch_tar) / 2
+
+        yaw = (yaw_pos + yaw_tar) / 2
+        #print("pos: ", yaw_pos, "  tar: ", yaw_tar, "  fin: ", yaw)
+
+        # if abs(pitch) <= 0.5:
+        #     pitch = 0.0
+        # elif pitch > 0:
+        #     pitch = 1.57
+        # else:
+        #     pitch = -1.57
 
         gmb_cmd.linear.y = pitch # pitch
         gmb_cmd.linear.z = 0.0

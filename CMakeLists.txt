@@ -47,6 +47,7 @@ add_message_files(
   FILES
   area.msg
   norms.msg
+  multiPoint.msg
 )
 
 generate_messages(
