@@ -128,6 +128,10 @@ def yawCallback(msg):
     global target_yaw
     target_yaw = msg.data
 
+def veloCallback(msg):
+    global maxVel
+    maxVel = msg.data
+
 def neighCallback(msg):
     global neighbors
     neighbors = msg
@@ -355,6 +359,7 @@ def main():
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
     rospy.Subscriber("/"+namespace+"/command/targetPoint", Point, targetCallback)
     rospy.Subscriber("/"+namespace+"/command/yaw", Float32, yawCallback)
+    rospy.Subscriber("/"+namespace+"/command/velocity", Float32, veloCallback)
     # Get Neighbor Positions
     rospy.Subscriber("/"+namespace+"/nbr_odom_cloud", PointCloud2, neighCallback)  
 

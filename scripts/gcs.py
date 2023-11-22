@@ -331,7 +331,7 @@ def main():
         normal_vectors.append(normls)
 
     # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_norms.csv",normls, delimiter=",")
-    # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_facet_mids.csv",facets, delimiter=",")
+    #np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_facet_mids.csv",facet_mids.reshape(facet_mids.shape[0],3), delimiter=",")
     norm_msg = norms()
     for facet, norm in zip(facet_mids, normal_vectors):
         for i in range(len(facet)):
@@ -360,9 +360,22 @@ def main():
                 inspect_points[box_i,counter,2] = round((bbox_points[box_i,i,2] + bbox_points[box_i,j,2])/2,4)
                 counter += 1
         cleared_inspect_points[box_i] = np.unique(inspect_points[box_i], axis=0)
+        # Create Delaunay triangulation
+        DT = Delaunay(bbox_points[box_i])
+        for j in range(0,int(len(bboxes.points)/8)):
+            delete_index = np.empty((0,1))
+            for i, (facet, norm) in enumerate(zip(facet_mids[j], normal_vectors[j])):
+                if DT.find_simplex(facet + norm) >= 0:
+                    delete_index = np.append(delete_index, [i])
+            delete_index = delete_index.astype(int)
+            if delete_index.size > 0:
+                facet_mids[j] = np.delete(facet_mids[j], delete_index, axis=0)
+                normal_vectors[j] = np.delete(normal_vectors[j], delete_index, axis=0)
+
+    #np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_facet_mids_pruned.csv",facet_mids, delimiter=",")
 
     cleared_inspect_points = np.delete(cleared_inspect_points,9, axis=1)
-    points = cleared_inspect_points
+    # points = cleared_inspect_points
     # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_points.csv",cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
  
     log_info("Sending waypoints")

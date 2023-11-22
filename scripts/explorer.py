@@ -2,7 +2,7 @@
 #### Created By Kios ####
 ##### 13 Nov 2023 #####
 import rospy
-from std_msgs.msg import Header, Float32, Bool, String, Int8
+from std_msgs.msg import Header, Float32, Bool, String
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs.point_cloud2
@@ -172,7 +172,7 @@ def yawCallback(msg):
 
 def veloCallback(msg):
     global maxVel
-    maxVel = int(msg.data)
+    maxVel = msg.data
 
 def neighCallback(msg):
     global neighbors
@@ -591,7 +591,7 @@ def main():
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
     rospy.Subscriber("/"+namespace+"/command/targetPoint", Point, targetCallback)
     rospy.Subscriber("/"+namespace+"/command/yaw", Float32, yawCallback)
-    rospy.Subscriber("/"+namespace+"/command/velocity", Int8, veloCallback)
+    rospy.Subscriber("/"+namespace+"/command/velocity", Float32, veloCallback)
     
 
     # create command publisher

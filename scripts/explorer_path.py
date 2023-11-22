@@ -3,7 +3,7 @@
 ##### 16 Nov 2023 #####
 import sys
 import rospy
-from std_msgs.msg import String, Bool, Int8
+from std_msgs.msg import String, Bool, Float32
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import PointCloud2
@@ -160,7 +160,7 @@ def main():
     # target point publisher
     target_pub = rospy.Publisher("/"+namespace+"/command/targetPoint", Point, queue_size=1)
     # velocity publisher
-    velo_pub = rospy.Publisher("/"+namespace+"/command/velocity", Int8, queue_size=1)
+    velo_pub = rospy.Publisher("/"+namespace+"/command/velocity", Float32, queue_size=1)
 
      # Wait for service to appear
     log_info("Waiting for ppcom")
@@ -342,8 +342,8 @@ def main():
             arrived = False
 
         if count < 3:
-            vel_msg = Int8()
-            vel_msg.data = 3 - count
+            vel_msg = Float32()
+            vel_msg.data = 3.0 - count
             velo_pub.publish(vel_msg)
         count += 1
     
