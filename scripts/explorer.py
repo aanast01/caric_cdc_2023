@@ -402,10 +402,6 @@ def go_to_point():
             rotation_msg.y = 0.0
             rotation_msg.z = np.sin(target_yaw/2.0)
             rotation_msg.w = np.cos(target_yaw/2.0)
-            
-            velocities_msg.linear.x = 0.0#max(min((waypoint[0]-odom.pose.pose.position.x) * 1.0,maxVel), -maxVel)
-            velocities_msg.linear.y = 0.0#max(min((waypoint[1]-odom.pose.pose.position.y) * 1.0,maxVel), -maxVel)
-            velocities_msg.linear.z = 0.0#max(min((waypoint[2]-odom.pose.pose.position.z) * 1.0,2.0), -2.0)
 
             #velocities_msg.linear = zero_vector_msg
             #q = odom.pose.pose.orientation

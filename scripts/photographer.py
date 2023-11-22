@@ -412,7 +412,7 @@ def main():
             waypoint = coordinates[path[1]]
 
             adjacency = update_adjacency_with_neighbors(adjacency_final)
-            publish_graph_viz()
+            #publish_graph_viz()
 
 
 if __name__ == '__main__':

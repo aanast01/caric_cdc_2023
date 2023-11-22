@@ -63,7 +63,6 @@ def calculateCircuits(positions, num_of_nodes, TravellingCost):
                 Set_S_cost[i].append(futureCost)
                 positions[i] = node
 
-    
     return Set_S_destination
 
 def set_tag(tag):
@@ -329,9 +328,8 @@ def main():
         
 
         log_info("Running mTSP")
-
         waypointsMatrix = calculateCircuits([i for i in range(num_of_agents)], num_of_nodes, adjacency)
-
+        log_info("TSP Path length: " + str(len(waypointsMatrix[pos])))
         for waypoint in waypointsMatrix[pos]:
             point = Point()
             point.x = points[waypoint,0]
