@@ -50,10 +50,16 @@ def dijkstra(g, arrival_pub, s, t):
     
     if (len(np.nonzero(g[s,:])[0]) == 0): 
         log_info("Source " + str(t) + " blocked")
+        arrived_msg = Bool()
+        arrived_msg.data = True
+        arrival_pub.publish(arrived_msg)
         return [s,s]
     
     if (len(np.nonzero(g[:,t])[0]) == 0):
         log_info("Target " + str(t) + " not reachable")
+        arrived_msg = Bool()
+        arrived_msg.data = True
+        arrival_pub.publish(arrived_msg)
         return [s,s]
     
     q = []
@@ -152,7 +158,7 @@ def update_adjacency_with_neighbors(adjacency):
                 adjacency_temp[:,neighbor_index]=0
 
     arr = np.sum(adjacency, axis=1)
-    isolated_indicies = np.where(arr <= grid_resolution)[0]
+    isolated_indicies = np.where(arr <= grid_resolution*2)[0]
     for _, index in enumerate(isolated_indicies):
         #log_info("ISOLATED NODE: " + str(coordinates[index]))
         adjacency_temp[:,index] = 0
