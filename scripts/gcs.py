@@ -211,6 +211,11 @@ def find_norms(vertices):
     # for normal in facet_normals:
     #     print(normal)
 
+    remove_indicies = np.where(P[:,2] <= 5)[0]
+    P = np.delete(P,remove_indicies, axis=0)
+    F = np.delete(F,remove_indicies, axis=0)
+
+
     return [P, F]
 
 def euclidean_distance_3d(p1,p2):
@@ -303,7 +308,7 @@ def main():
     area_msg.size.z = size_z
     area_msg.resolution.data = grid_res
     msg_pub.publish(area_msg)
-    
+
     # find inspection target points
     log_info("Calculating waypoints based on bounding boxes")
 
@@ -329,7 +334,7 @@ def main():
     # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_facet_mids.csv",facets, delimiter=",")
     norm_msg = norms()
     for facet, norm in zip(facet_mids, normal_vectors):
-        for i in range(12):
+        for i in range(len(facet)):
             facet_mid = Point()
             facet_mid.x = facet[i,0]
             facet_mid.y = facet[i,1]

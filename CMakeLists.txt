@@ -82,9 +82,6 @@ target_link_libraries(${PROJECT_NAME}_octomap_translator_node
 
 # Declare the nodes
 catkin_install_python(PROGRAMS scripts/odom2tf.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
-catkin_install_python(PROGRAMS scripts/test_flight.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
-catkin_install_python(PROGRAMS scripts/mpc_implementation.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
-catkin_install_python(PROGRAMS scripts/helper.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 catkin_install_python(PROGRAMS scripts/gcs.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 catkin_install_python(PROGRAMS scripts/explorer.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 catkin_install_python(PROGRAMS scripts/uav_fov.py DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

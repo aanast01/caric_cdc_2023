@@ -3,7 +3,7 @@
 ##### 16 Nov 2023 #####
 import sys
 import rospy
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String, Bool, Int8
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import PointCloud2
@@ -160,6 +160,8 @@ def main():
 
     # target point publisher
     target_pub = rospy.Publisher("/"+namespace+"/command/targetPoint", Point, queue_size=1)
+    # velocity publisher
+    velo_pub = rospy.Publisher("/"+namespace+"/command/velocity", Int8, queue_size=1)
 
      # Wait for service to appear
     log_info("Waiting for ppcom")
@@ -179,18 +181,21 @@ def main():
     log_info("Waiting for area details")
     area_details = rospy.wait_for_message("/world_coords/"+namespace, area)
 
-    min_x = area_details.minPoint.x
-    max_x = int(area_details.minPoint.x + area_details.size.x * area_details.resolution.data)
+    min_x = area_details.minPoint.x + 10.0
+    max_x = int(area_details.minPoint.x + area_details.size.x * area_details.resolution.data) - 10.0
     mid_x = (min_x + max_x)/2.0
 
-    min_y = area_details.minPoint.y
-    max_y = int(area_details.minPoint.y + area_details.size.y * area_details.resolution.data)
+    min_y = area_details.minPoint.y + 10.0
+    max_y = int(area_details.minPoint.y + area_details.size.y * area_details.resolution.data) - 10.0
     mid_y = (min_y + max_y)/2.0
 
-    min_z = area_details.minPoint.z
+    min_z = area_details.minPoint.z + 10.0
     max_z = int(area_details.minPoint.z + area_details.size.z * area_details.resolution.data)
     mid_z = ((min_z + max_z)/2.0)
-    
+
+    rospy.wait_for_message("/"+namespace+"/ground_truth/odometry", Odometry)
+    init_pos = position
+
     if scenario != 'hangar':
         # if x dimension is longest
         if (max_x >= max_y) and (max_x >= max_z):
@@ -224,8 +229,17 @@ def main():
                 target_points_raffles = np.array([[max_x, mid_y, mid_z],
                                                     [max_x, mid_y, max_z]])
     else:
-        target_points_jurong = np.array([[mid_x, max_y, max_z],
-                                         [mid_x, min_y, max_z]])
+        p1 = np.array([mid_x, max_y, max_z])
+        p2 = np.array([mid_x, min_y, max_z])
+        d1 = euclidean_distance(p1, init_pos)
+        d2 = euclidean_distance(p2, init_pos)
+        if (d1 < d2):
+            target_points_jurong = np.array([p1,
+                                             p2])
+        else:
+            target_points_jurong = np.array([p2,
+                                             p1])
+
 
     if drone_IDs[namespace] == drone_IDs['jurong']:
         target_points = target_points_jurong
@@ -234,7 +248,6 @@ def main():
 
     log_info("Waiting for adjacency build")
     rospy.wait_for_message("/"+namespace+"/adjacency_viz", MarkerArray)
-    init_pos = position
     rate.sleep()
 
     filename_msg = rospy.wait_for_message("/waypoints/"+namespace, String)
@@ -284,6 +297,7 @@ def main():
     # Generate and go to TSP points
     log_info("Loading waypoints")
     cleared_inspect_points = np.loadtxt(filename_msg.data, delimiter=",")
+    count = 0
     while repeat:
         neighbors = rospy.wait_for_message("/"+namespace+"/nbr_odom_cloud", PointCloud2)
         uav_positions = np.empty((0,3))
@@ -328,6 +342,12 @@ def main():
                 target_pub.publish(point)
                 rate.sleep()
             arrived = False
+
+        if count < 3:
+            vel_msg = Int8()
+            vel_msg.data = 3 - count
+            velo_pub.publish(vel_msg)
+        count += 1
     
 
     # Return to Home (ensure LOS with GCS)

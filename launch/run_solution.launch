@@ -4,7 +4,7 @@
     <arg name="scenario" default="mbs" />
 
     <arg name="grid_resolution" default="6" unless="$(eval arg('scenario') == 'hangar')"/>
-    <arg name="grid_resolution" value="6" if="$(eval arg('scenario') == 'hangar')"/>
+    <arg name="grid_resolution" value="5" if="$(eval arg('scenario') == 'hangar')"/>
     
     <!-- Launch the simulator -->
     <include file="$(find caric_mission)/launch/run_$(arg scenario).launch" />
@@ -99,19 +99,18 @@
     </group>
     
     <!-- PHOTOGRAPHERS -->
-    <group unless="$(eval arg('scenario') == 'hangar')">
-        <group ns="changi">
-            <arg name="namespace"  default="changi" />
-            <param name="namespace" value="$(arg namespace)" />
-            <param name="scenario" value="$(arg scenario)" />
-            <param name="grid_resolution" value="$(arg grid_resolution)" />
-            <param name="debug" value="true" />
+    <group ns="changi">
+        <arg name="namespace"  default="changi" />
+        <param name="namespace" value="$(arg namespace)" />
+        <param name="scenario" value="$(arg scenario)" />
+        <param name="grid_resolution" value="$(arg grid_resolution)" />
+        <param name="debug" value="true" />
 
-            <node name="fov_control" pkg="kios_solution" type="uav_fov.py"  output="screen"/>
-            <node name="photographer_trajectory" pkg="kios_solution" type="photographer.py"  output="screen"/>
-            <node name="photographer_path" pkg="kios_solution" type="photographer_path.py"  output="screen"/>
-        </group>
+        <node name="fov_control" pkg="kios_solution" type="uav_fov.py"  output="screen"/>
+        <node name="photographer_trajectory" pkg="kios_solution" type="photographer.py"  output="screen"/>
+        <node name="photographer_path" pkg="kios_solution" type="photographer_path.py"  output="screen"/>
     </group>
+    
 
     <group ns="sentosa">
         <arg name="namespace"  default="sentosa" />
@@ -125,17 +124,18 @@
         <node name="photographer_path" pkg="kios_solution" type="photographer_path.py"  output="screen"/>
     </group>
     
+    <group unless="$(eval arg('scenario') == 'hangar')">
+        <group ns="nanyang">
+            <arg name="namespace"  default="nanyang" />
+            <param name="namespace" value="$(arg namespace)" />
+            <param name="scenario" value="$(arg scenario)" />
+            <param name="grid_resolution" value="$(arg grid_resolution)" />
+            <param name="debug" value="true" />
 
-    <group ns="nanyang">
-        <arg name="namespace"  default="nanyang" />
-        <param name="namespace" value="$(arg namespace)" />
-        <param name="scenario" value="$(arg scenario)" />
-        <param name="grid_resolution" value="$(arg grid_resolution)" />
-        <param name="debug" value="true" />
-
-        <node name="fov_control" pkg="kios_solution" type="uav_fov.py"  output="screen"/>
-        <node name="photographer_trajectory" pkg="kios_solution" type="photographer.py"  output="screen"/>
-        <node name="photographer_path" pkg="kios_solution" type="photographer_path.py"  output="screen"/>
+            <node name="fov_control" pkg="kios_solution" type="uav_fov.py"  output="screen"/>
+            <node name="photographer_trajectory" pkg="kios_solution" type="photographer.py"  output="screen"/>
+            <node name="photographer_path" pkg="kios_solution" type="photographer_path.py"  output="screen"/>
+        </group>
     </group>
     
     <!-- For visualization -->

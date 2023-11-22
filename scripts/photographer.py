@@ -20,7 +20,7 @@ import threading
 import time
 
 
-maxVel = 2.0
+maxVel = 0.0
 debug = False
 TAG = ""
 odom = Odometry()
@@ -132,36 +132,31 @@ def neighCallback(msg):
     global neighbors
     neighbors = msg
 
-def update_adjacency_with_neighbors(adjacency):
+def update_adjacency_with_neighbors(adjacency_og):
     global neighbors, grid_resolution, coordinates, area_details
-
-    adjacency_temp = np.copy(adjacency)
+    adjacency_temp = np.copy(adjacency_og)
     for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
         if point[3] != 0: 
             index = closest_node_index_1((point[0], point[1], point[2]), coordinates)
             adjacency_temp[:,index]=0
-            for _, offset in enumerate(offsets_cross):
+            for q, offset in enumerate(offsets_cross):
                 neighbor_x = coordinates[index,0]+(offset[0] * grid_resolution)
                 neighbor_y = coordinates[index,1]+(offset[1] * grid_resolution)
                 neighbor_z = coordinates[index,2]+(offset[2] * grid_resolution)
             
-                
                 gone_too_far_x = (neighbor_x < area_details.minPoint.x) or (neighbor_x > (area_details.minPoint.x + area_details.size.x*area_details.resolution.data))
                 gone_too_far_y = (neighbor_y < area_details.minPoint.y) or (neighbor_y > (area_details.minPoint.y + area_details.size.y*area_details.resolution.data))
                 gone_too_far_z = (neighbor_z < area_details.minPoint.z) or (neighbor_z > (area_details.minPoint.z + area_details.size.z*area_details.resolution.data))
                 if gone_too_far_x or gone_too_far_y or gone_too_far_z:
                     #log_info(f"{gone_too_far_x}, {gone_too_far_y}, {gone_too_far_z}")
                     continue
-                
-                
+               
                 neighbor_index = closest_node_index_1((neighbor_x, neighbor_y, neighbor_z),coordinates)
                 adjacency_temp[:,neighbor_index]=0
 
-    arr = np.sum(adjacency, axis=1)
+    arr = np.sum(adjacency_temp, axis=1)
     isolated_indicies = np.where(arr <= grid_resolution*2)[0]
-    for _, index in enumerate(isolated_indicies):
-        #log_info("ISOLATED NODE: " + str(coordinates[index]))
-        adjacency_temp[:,index] = 0
+    adjacency_temp[:,isolated_indicies] = 0
 
     return adjacency_temp
 
@@ -186,20 +181,25 @@ def go_to_point():
             acceleration_msg = Twist()
             
             
-            translation_msg.x = 0.0
-            translation_msg.y = 0.0
-            translation_msg.z = 0.0
+            if maxVel == 0.0:
+                translation_msg.x = waypoint[0]
+                translation_msg.y = waypoint[1]
+                translation_msg.z = waypoint[2]
+                velocities_msg.linear.x = 0.0#max(min((waypoint[0]-odom.pose.pose.position.x) * 1.0,maxVel), -maxVel)
+                velocities_msg.linear.y = 0.0#max(min((waypoint[1]-odom.pose.pose.position.y) * 1.0,maxVel), -maxVel)
+                velocities_msg.linear.z = 0.0#max(min((waypoint[2]-odom.pose.pose.position.z) * 1.0,2.0), -2.0)
+            else:
+                translation_msg.x = 0.0
+                translation_msg.y = 0.0
+                translation_msg.z = 0.0
+                velocities_msg.linear.x = max(min((waypoint[0]-odom.pose.pose.position.x) * 1.0,maxVel), -maxVel)
+                velocities_msg.linear.y = max(min((waypoint[1]-odom.pose.pose.position.y) * 1.0,maxVel), -maxVel)
+                velocities_msg.linear.z = max(min((waypoint[2]-odom.pose.pose.position.z) * 1.0,maxVel), -maxVel)
+
             rotation_msg.x = 0.0
             rotation_msg.y = 0.0
             rotation_msg.z = np.sin(target_yaw/2.0)
-            rotation_msg.w = np.cos(target_yaw/2.0)
-            
-            
-            velocities_msg.linear.x = max(min((waypoint[0]-odom.pose.pose.position.x) * 1.0,maxVel), -maxVel)
-            velocities_msg.linear.y = max(min((waypoint[1]-odom.pose.pose.position.y) * 1.0,maxVel), -maxVel)
-            velocities_msg.linear.z = max(min((waypoint[2]-odom.pose.pose.position.z) * 1.0,2.0), -2.0)
-            
-
+            rotation_msg.w = np.cos(target_yaw/2.0)          
             
             #velocities_msg.linear = zero_vector_msg
             #q = odom.pose.pose.orientation
@@ -249,9 +249,89 @@ def closest_node_index(node, nodes):
     
     return valid_dist_indices[np.argmin(dist_2)]
 
+def publish_graph_viz():
+    global waypoint, namespace, viz_pub, coordinates, adjacency
+    marker_array = MarkerArray()
+    rate = rospy.Rate(0.1)
+    # while True:
+    for indx, coord in enumerate(coordinates):
+        if sum(adjacency[:,indx]) == 0:
+            marker = Marker()
+            marker.header.frame_id = "world"
+            marker.type = marker.CUBE
+            marker.action = marker.ADD
+            marker.scale.x = grid_resolution
+            marker.scale.y = grid_resolution
+            marker.scale.z = grid_resolution
+            #marker.color.a = 0.05
+            #index = closest_node_index(coord,coords)
+            
+            marker.color.r = 1.0
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            marker.color.a = 0.9
+            # else:
+            #     marker.color.r = 1.0
+            #     marker.color.g = 1.0
+            #     marker.color.b = 1.0
+            marker.pose.orientation.w = 1.0
+            marker.pose.position.x = coord[0]
+            marker.pose.position.y = coord[1]
+            marker.pose.position.z = coord[2]
+            marker_array.markers.append(marker)
+        elif sum(adjacency[indx,:]) == 0:
+            marker = Marker()
+            marker.header.frame_id = "world"
+            marker.type = marker.CUBE
+            marker.action = marker.ADD
+            marker.scale.x = grid_resolution
+            marker.scale.y = grid_resolution
+            marker.scale.z = grid_resolution
+            #marker.color.a = 0.05
+            #index = closest_node_index(coord,coords)
+            
+            marker.color.r = 1.0
+            marker.color.g = 0.0
+            marker.color.b = 1.0
+            marker.color.a = 0.9
+            # else:
+            #     marker.color.r = 1.0
+            #     marker.color.g = 1.0
+            #     marker.color.b = 1.0
+            marker.pose.orientation.w = 1.0
+            marker.pose.position.x = coord[0]
+            marker.pose.position.y = coord[1]
+            marker.pose.position.z = coord[2]
+            marker_array.markers.append(marker)
+
+    marker = Marker()
+    marker.header.frame_id = "world"
+    marker.type = marker.SPHERE
+    marker.action = marker.ADD
+    marker.scale.x = grid_resolution/5.0
+    marker.scale.y = grid_resolution/5.0
+    marker.scale.z = grid_resolution/5.0
+    marker.color.a = 1.0
+    marker.color.r = 0.0
+    marker.color.g = 1.0
+    marker.color.b = 1.0
+    marker.pose.orientation.w = 1.0
+    marker.pose.position.x = coordinates[target][0]
+    marker.pose.position.y = coordinates[target][1]
+    marker.pose.position.z = coordinates[target][2]
+    marker_array.markers.append(marker)
+
+    id = 0
+    for m in marker_array.markers:
+        m.id = id
+        id += 1
+
+    viz_pub.publish(marker_array)
+        # rate.sleep()
+
 def main():
     # init
-    global cmdPub, waypoint, command_thread, coordinates, target, grid_resolution, namespace, debug, adjacency, adjacency_final, area_details
+    global cmdPub, waypoint, command_thread, coordinates, target, grid_resolution, namespace, debug, adjacency, area_details, viz_pub
     try:
         namespace = rospy.get_param('namespace') # node_name/argsname
         scenario = rospy.get_param('scenario')
@@ -275,10 +355,13 @@ def main():
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
     rospy.Subscriber("/"+namespace+"/command/targetPoint", Point, targetCallback)
     rospy.Subscriber("/"+namespace+"/command/yaw", Float32, yawCallback)
-    
+    # Get Neighbor Positions
+    rospy.Subscriber("/"+namespace+"/nbr_odom_cloud", PointCloud2, neighCallback)  
 
     # create command publisher
     cmdPub = rospy.Publisher("/"+namespace+"/command/trajectory", MultiDOFJointTrajectory, queue_size=1)
+    # adjacency vis pub
+    viz_pub = rospy.Publisher("/"+namespace+"/adjacency_viz", MarkerArray, queue_size=1)
     # occupied coordinates publisher
     arrival_pub = rospy.Publisher('/'+namespace+'/arrived_at_target', Bool, queue_size=1)
 
@@ -311,7 +394,7 @@ def main():
     adjacency_final = np.loadtxt(filename_msg.data, delimiter=",")
     coordinates = np.loadtxt("./"+explorer_name+"_coordinates.csv", delimiter=",")
     adjacency = update_adjacency_with_neighbors(adjacency_final)
-    
+    publish_graph_viz()
 
     log_info("Waiting for target point")
     arrival_pub.publish(True)
@@ -329,7 +412,7 @@ def main():
             waypoint = coordinates[path[1]]
 
             adjacency = update_adjacency_with_neighbors(adjacency_final)
-
+            publish_graph_viz()
 
 
 if __name__ == '__main__':
