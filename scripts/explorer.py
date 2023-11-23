@@ -314,6 +314,11 @@ def update_from_neighbor(coordinates):
 
     filename = "./"+namespace+"_adjacency.csv"
     np.savetxt(filename, adjacency_final, delimiter=",")
+    #TODO: Delete this
+    filename = "./"+scenario+"_adjacency.csv"
+    np.savetxt(filename, adjacency_final, delimiter=",")
+    filename = "./"+scenario+"_coordinates.csv"
+    np.savetxt(filename, coordinates, delimiter=",")
     filename_str = String()
     filename_str.data = filename
     bool_msg = Bool()
@@ -649,7 +654,6 @@ def main():
     log_info("Adjacency Build Time: " +  str(duration) + "s")
 
     
-
     # Get obstacles' coordinates
     # log_info("Clearing agent position")
     # try:
@@ -741,6 +745,11 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("terminating...")
         command_thread.terminate()
+        filename1 = "./"+namespace+"_adjacency.csv"
+        filename2 = "./"+namespace+"_coordinates.csv"
+        import os
+        os.remove(filename1)
+        os.remove(filename2)
     except Exception as e:
         print(e)
     finally:

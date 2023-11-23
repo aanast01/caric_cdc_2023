@@ -346,8 +346,8 @@ def main():
             norm_point.z = norm[i,2]
             norm_msg.normals.append(norm_point)
     
-    
-    #np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_points.csv",bbox_points.reshape(int(len(bboxes.points)),3), delimiter=",")
+    # TODO: delete this
+    np.savetxt("/home/dronesteam/ws_caric/"+scenario+"_points.csv",bbox_points.reshape(int(len(bboxes.points)),3), delimiter=",")
 
     inspect_points = np.zeros((int(len(bboxes.points)/8),28,3))
     cleared_inspect_points = np.zeros((int(len(bboxes.points)/8),19,3))
@@ -382,6 +382,11 @@ def main():
  
     filename = "./"+namespace+"_waypoints.csv"
     np.savetxt(filename, cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
+
+    # TODO: delete this
+    filename = "./"+scenario+"_waypoints.csv"
+    np.savetxt(filename, cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
+
     str_msg = String()
     str_msg.data = filename
 
@@ -396,6 +401,9 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
+        filename = "./gcs_waypoints.csv"
+        import os
+        os.remove(filename)
         print("terminating...")
     except Exception as e:
         print(e)

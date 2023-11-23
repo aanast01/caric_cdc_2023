@@ -20,7 +20,7 @@ import threading
 import time
 
 
-maxVel = 0.0
+maxVel = 2.5
 debug = False
 TAG = ""
 odom = Odometry()
@@ -185,20 +185,20 @@ def go_to_point():
             acceleration_msg = Twist()
             
             
-            if maxVel == 0.0:
-                translation_msg.x = waypoint[0]
-                translation_msg.y = waypoint[1]
-                translation_msg.z = waypoint[2]
-                velocities_msg.linear.x = 0.0#max(min((waypoint[0]-odom.pose.pose.position.x) * 1.0,maxVel), -maxVel)
-                velocities_msg.linear.y = 0.0#max(min((waypoint[1]-odom.pose.pose.position.y) * 1.0,maxVel), -maxVel)
-                velocities_msg.linear.z = 0.0#max(min((waypoint[2]-odom.pose.pose.position.z) * 1.0,2.0), -2.0)
-            else:
-                translation_msg.x = 0.0
-                translation_msg.y = 0.0
-                translation_msg.z = 0.0
-                velocities_msg.linear.x = max(min((waypoint[0]-odom.pose.pose.position.x) * 1.0,maxVel), -maxVel)
-                velocities_msg.linear.y = max(min((waypoint[1]-odom.pose.pose.position.y) * 1.0,maxVel), -maxVel)
-                velocities_msg.linear.z = max(min((waypoint[2]-odom.pose.pose.position.z) * 1.0,maxVel), -maxVel)
+            # if maxVel == 0.0:
+            #     translation_msg.x = waypoint[0]
+            #     translation_msg.y = waypoint[1]
+            #     translation_msg.z = waypoint[2]
+            #     velocities_msg.linear.x = 0.0#max(min((waypoint[0]-odom.pose.pose.position.x) * 1.0,maxVel), -maxVel)
+            #     velocities_msg.linear.y = 0.0#max(min((waypoint[1]-odom.pose.pose.position.y) * 1.0,maxVel), -maxVel)
+            #     velocities_msg.linear.z = 0.0#max(min((waypoint[2]-odom.pose.pose.position.z) * 1.0,2.0), -2.0)
+            # else:
+            translation_msg.x = 0.0
+            translation_msg.y = 0.0
+            translation_msg.z = 0.0
+            velocities_msg.linear.x = max(min((waypoint[0]-odom.pose.pose.position.x) * 1.0,maxVel), -maxVel)
+            velocities_msg.linear.y = max(min((waypoint[1]-odom.pose.pose.position.y) * 1.0,maxVel), -maxVel)
+            velocities_msg.linear.z = max(min((waypoint[2]-odom.pose.pose.position.z) * 1.0,maxVel), -maxVel)
 
             rotation_msg.x = 0.0
             rotation_msg.y = 0.0

@@ -228,7 +228,7 @@ def main():
                 target_points_raffles = np.array([[max_x, mid_y, mid_z],
                                                     [max_x, mid_y, max_z]])
     else:
-        p1 = np.array([mid_x, max_y, max_z])
+        p1 = np.array([mid_x, max_y+5.0, max_z])
         p2 = np.array([mid_x, min_y, max_z])
         d1 = euclidean_distance(p1, init_pos)
         d2 = euclidean_distance(p2, init_pos)

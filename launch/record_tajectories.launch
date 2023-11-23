@@ -1,0 +1,4 @@
+<launch>
+    <node pkg="rosbag" type="record" name="rosbag_record_traj"
+    args="record -o /home/dronesteam/ws_caric/custom_logs/traj.bag /raffles/ground_truth/odometry /jurong/ground_truth/odometry /changi/ground_truth/odometry /sentosa/ground_truth/odometry /nanyang/ground_truth/odometry"/>  
+</launch>
