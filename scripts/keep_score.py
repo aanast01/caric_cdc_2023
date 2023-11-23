@@ -4,7 +4,8 @@ from std_msgs.msg import Duration
 import csv
 import time
 
-score = [['detected,num_of_interest,score,time,mission_time']]
+# score = [['detected,num_of_interest,score,time,mission_time']]
+score = []
 remaining = 10000000
 TAG = '[REPORT SCRIPT]: '
 count = 0

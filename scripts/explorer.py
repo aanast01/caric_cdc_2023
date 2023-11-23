@@ -314,11 +314,6 @@ def update_from_neighbor(coordinates):
 
     filename = "./"+namespace+"_adjacency.csv"
     np.savetxt(filename, adjacency_final, delimiter=",")
-    #TODO: Delete this
-    filename = "./"+scenario+"_adjacency.csv"
-    np.savetxt(filename, adjacency_final, delimiter=",")
-    filename = "./"+scenario+"_coordinates.csv"
-    np.savetxt(filename, coordinates, delimiter=",")
     filename_str = String()
     filename_str.data = filename
     bool_msg = Bool()

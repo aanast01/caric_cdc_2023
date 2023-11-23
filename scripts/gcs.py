@@ -10,10 +10,62 @@ from nav_msgs.msg import Odometry
 from caric_mission.srv import CreatePPComTopic
 from kios_solution.msg import area, norms, multiPoint
 from geometry_msgs.msg import Point
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay, ConvexHull
 import numpy as np
 import sys
 import math
+
+
+def generate_points_on_cuboid_faces(vertices, num_points_per_face=10):
+    # Convert vertices to a NumPy array for easier manipulation
+    vertices = np.array(vertices)
+ 
+    # Find the convex hull of the vertices
+    hull = ConvexHull(vertices)
+    faces = hull.simplices  # Get the vertices of each face
+ 
+    all_points = []
+ 
+    for face in faces:
+        # Extract the vertices of the current face
+        current_face = vertices[face]
+ 
+        # Calculate two edges of the face
+        edge1 = current_face[1] - current_face[0]
+        edge2 = current_face[2] - current_face[0]
+ 
+        # Generate points on the current face using parametric equations
+        u = np.linspace(0, 1, num_points_per_face)
+        v = np.linspace(0, 1, num_points_per_face)
+        u, v = np.meshgrid(u, v)
+        
+ 
+        face_points = []
+        for i in range(num_points_per_face):
+            for j in range(num_points_per_face-i):
+                # Calculate the point on the face using parametric equations
+                point_on_face = current_face[0] + u[i][j] * edge2 + v[i][j] * edge1
+                face_points.append(point_on_face)
+        all_points.extend(face_points)
+ 
+    return np.array(all_points)
+
+def check_point_inside_cuboid(vertices, point):
+    # Extract x, y, z coordinates of the vertices
+    x_coords, y_coords, z_coords = zip(*vertices)
+    # Determine the boundaries
+    min_x = min(x_coords)+5
+    max_x = max(x_coords)-5
+    min_y = min(y_coords)+5
+    max_y = max(y_coords)-5
+    min_z = min(z_coords)+5
+    max_z = max(z_coords)-5
+    # Check if the point is inside the cuboid
+    x_p, y_p, z_p = point
+    if min_x < x_p < max_x and min_y < y_p < max_y and min_z < z_p < max_z:
+        return True
+    else:
+        return False
 
 def calculateCircuits(positions, num_of_nodes, TravellingCost):
     UAVs = len(positions)
@@ -197,6 +249,8 @@ def find_norms(vertices):
             normals.append(-normal)
         else:
             normals.append(normal)
+
+             
     
     F = np.array(normals)
  
@@ -312,7 +366,7 @@ def main():
     # find inspection target points
     log_info("Calculating waypoints based on bounding boxes")
 
-    num_of_nodes = len(bboxes.points) #+ num_of_agents
+    # num_of_nodes = len(bboxes.points) #+ num_of_agents
 
     bbox_points = np.zeros((int(len(bboxes.points)/8),8,3))
     facet_mids = []
@@ -332,6 +386,44 @@ def main():
 
     # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_norms.csv",normls, delimiter=",")
     #np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_facet_mids.csv",facet_mids.reshape(facet_mids.shape[0],3), delimiter=",")
+   
+    # TODO: delete this
+    # np.savetxt("/home/dronesteam/ws_caric/"+scenario+"_bbox_veritcies.csv",bbox_points.reshape(int(len(bboxes.points)),3), delimiter=",")
+
+    #create interest points
+    all_points = []
+    for box_i in range(0,int(len(bboxes.points)/8)):
+        all_points.extend(generate_points_on_cuboid_faces(bbox_points[box_i],4))
+
+    all_points = np.unique(np.asarray(all_points), axis=0)
+
+    # inspect_points = np.zeros((int(len(bboxes.points)/8),28,3))
+    # cleared_inspect_points = np.zeros((int(len(bboxes.points)/8),19,3))
+    # all_points = np.zeros((int(len(bboxes.points)/8),26,3))
+    for box_i in range(0,int(len(bboxes.points)/8)):
+        DT = Delaunay(bbox_points[box_i])
+        for j in range(0,int(len(bboxes.points)/8)):
+            delete_index = np.empty((0,1))
+            for i, (facet, norm) in enumerate(zip(facet_mids[j], normal_vectors[j])):
+                if DT.find_simplex(facet + norm) >= 0:
+                    delete_index = np.append(delete_index, [i])
+            delete_index = delete_index.astype(int)
+            if delete_index.size > 0:
+                facet_mids[j] = np.delete(facet_mids[j], delete_index, axis=0)
+                normal_vectors[j] = np.delete(normal_vectors[j], delete_index, axis=0)
+    #     counter = 0
+    #     for i in range(8):
+    #         for j in range(i+1,8):
+    #             inspect_points[box_i,counter,0] = round((bbox_points[box_i,i,0] + bbox_points[box_i,j,0])/2,4)
+    #             inspect_points[box_i,counter,1] = round((bbox_points[box_i,i,1] + bbox_points[box_i,j,1])/2,4)
+    #             inspect_points[box_i,counter,2] = round((bbox_points[box_i,i,2] + bbox_points[box_i,j,2])/2,4)
+    #             counter += 1
+    #     cleared_inspect_points[box_i] = np.unique(inspect_points[box_i], axis=0)
+    #     kokos = np.delete(cleared_inspect_points[box_i],9, axis=0)
+        
+    #     all_points[box_i] = np.concatenate((bbox_points[box_i], kokos), axis=0)
+        # Create Delaunay triangulation
+    
     norm_msg = norms()
     for facet, norm in zip(facet_mids, normal_vectors):
         for i in range(len(facet)):
@@ -346,46 +438,19 @@ def main():
             norm_point.z = norm[i,2]
             norm_msg.normals.append(norm_point)
     
-    # TODO: delete this
-    np.savetxt("/home/dronesteam/ws_caric/"+scenario+"_points.csv",bbox_points.reshape(int(len(bboxes.points)),3), delimiter=",")
+    # #np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_facet_mids_pruned.csv",facet_mids, delimiter=",")
 
-    inspect_points = np.zeros((int(len(bboxes.points)/8),28,3))
-    cleared_inspect_points = np.zeros((int(len(bboxes.points)/8),19,3))
-    for box_i in range(0,int(len(bboxes.points)/8)):
-        counter = 0
-        for i in range(8):
-            for j in range(i+1,8):
-                inspect_points[box_i,counter,0] = round((bbox_points[box_i,i,0] + bbox_points[box_i,j,0])/2,4)
-                inspect_points[box_i,counter,1] = round((bbox_points[box_i,i,1] + bbox_points[box_i,j,1])/2,4)
-                inspect_points[box_i,counter,2] = round((bbox_points[box_i,i,2] + bbox_points[box_i,j,2])/2,4)
-                counter += 1
-        cleared_inspect_points[box_i] = np.unique(inspect_points[box_i], axis=0)
-        # Create Delaunay triangulation
-        DT = Delaunay(bbox_points[box_i])
-        for j in range(0,int(len(bboxes.points)/8)):
-            delete_index = np.empty((0,1))
-            for i, (facet, norm) in enumerate(zip(facet_mids[j], normal_vectors[j])):
-                if DT.find_simplex(facet + norm) >= 0:
-                    delete_index = np.append(delete_index, [i])
-            delete_index = delete_index.astype(int)
-            if delete_index.size > 0:
-                facet_mids[j] = np.delete(facet_mids[j], delete_index, axis=0)
-                normal_vectors[j] = np.delete(normal_vectors[j], delete_index, axis=0)
-
-    #np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_facet_mids_pruned.csv",facet_mids, delimiter=",")
-
-    cleared_inspect_points = np.delete(cleared_inspect_points,9, axis=1)
-    # points = cleared_inspect_points
-    # np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_points.csv",cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
+    log_info("Saving file")
+    np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_points.csv",all_points, delimiter=",")
  
     log_info("Sending waypoints")
  
     filename = "./"+namespace+"_waypoints.csv"
-    np.savetxt(filename, cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
+    np.savetxt(filename, all_points, delimiter=",")
 
-    # TODO: delete this
-    filename = "./"+scenario+"_waypoints.csv"
-    np.savetxt(filename, cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
+    # # TODO: delete this
+    # filename = "./"+scenario+"_waypoints.csv"
+    # np.savetxt(filename, cleared_inspect_points.reshape(int(len(bboxes.points)/8)*18,3), delimiter=",")
 
     str_msg = String()
     str_msg.data = filename
