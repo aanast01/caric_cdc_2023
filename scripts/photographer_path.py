@@ -180,11 +180,11 @@ def main():
                 rate.sleep()
             arrived = False
 
-        if count < 3:
+        if count < 2.0:
             vel_msg = Float32()
             vel_msg.data = 2.5 - count
             velo_pub.publish(vel_msg)
-        count += 1
+        count += 0.5
     
 
     # Return to Home (ensure LOS with GCS)

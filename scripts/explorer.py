@@ -273,8 +273,11 @@ def update_from_neighbor(coordinates):
     global adjacency, update, namespace, mutex, adjacency_final, scenario
     log_info("waiting for update command")
     flag_pub = rospy.Publisher("/"+namespace+"/command/update_done", Bool, queue_size=1, latch=True)
+    flag_pub2 = rospy.Publisher("/"+namespace+"/command/update", Bool, queue_size=1, latch=True)
     adj_pub = rospy.Publisher("/"+namespace+"/adjacency", String, queue_size=1, latch=True)
-    
+    bool_msg = Bool()
+    bool_msg.data = True
+
     rospy.wait_for_message("/"+namespace+"/command/update", Bool)
     rate = rospy.Rate(1)
     # clear_agent_box(4, namespace)
@@ -294,16 +297,24 @@ def update_from_neighbor(coordinates):
             rate.sleep()
 
         update = False
+        flag_pub.publish(bool_msg)
+        flag_pub2.publish(bool_msg)
         log_info("Acquiring mutex")
         mutex.acquire()
+        flag_pub2.publish(bool_msg)
         log_info("Merging map")
+        flag_pub2.publish(bool_msg)
         adjacency_final, _ = update_adjacency(adjacency, coordinates, occupancy_coords)
+        flag_pub2.publish(bool_msg)
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
+        flag_pub2.publish(bool_msg)
         adjacency_final, _ = update_adjacency(adjacency_final, coordinates, occupancy_coords)
+        flag_pub2.publish(bool_msg)
         mutex.release()
         log_info("Merging DONE")
     else:
         update = False
+        flag_pub2.publish(bool_msg)
         log_info("Acquiring mutex")
         mutex.acquire()
         log_info("Final map update")
@@ -316,10 +327,9 @@ def update_from_neighbor(coordinates):
     np.savetxt(filename, adjacency_final, delimiter=",")
     filename_str = String()
     filename_str.data = filename
-    bool_msg = Bool()
-    bool_msg.data = True
     while not rospy.is_shutdown():
         flag_pub.publish(bool_msg)
+        flag_pub2.publish(bool_msg)
         adj_pub.publish(filename_str)
         publish_graph_viz(coordinates, adjacency_final)
         rate.sleep
@@ -615,13 +625,15 @@ def main():
     # Register the topic with ppcom router
     response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/occupancy_coords', 'sensor_msgs', 'PointCloud2')
     response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/adjacency', 'std_msgs', 'String')
-    
+    # Register the topic with ppcom router
     if namespace == 'jurong':
         response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
+        response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
     else:
         response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
+        response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
 
-
+        
     # log_info(response)
     #response = create_ppcom_topic(namespace, ['all'], '/octomap_binary', 'kios_solution', 'area')
     # Create the publisher
