@@ -1,14 +1,18 @@
 ### Explorer Path Planning Code ###
 #### Created By Kios ####
 ##### 16 Nov 2023 #####
+__author__ = "Andreas Anastasiou, Angelos Zacharia"
+__copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
+__version__ = "6.0"
+
 import sys
 import rospy
 from std_msgs.msg import String, Bool, Float32
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist, Point
+from geometry_msgs.msg import Point
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs.point_cloud2
-from kios_solution.msg import area, multiPoint
+from kios_solution.msg import area
 from caric_mission.srv import CreatePPComTopic
 from visualization_msgs.msg import MarkerArray
 import numpy as np
@@ -38,12 +42,8 @@ def calculateCircuits(positions, num_of_nodes, TravellingCost):
     Set_S_destination = [[] for i in range(0, UAVs)]
     Set_S_cost = [[] for i in range(0, UAVs)]
     listV1 = [0 for i in range(0, num_of_nodes)]
-    # print("POSS: ",positions[:])
     for z in range(0, UAVs):
         listV1[positions[z]] = 1
-    # print positions
-    # print "before listV: ", listV1
-    # assignment of the first K nodes.
     while (sum(listV1) < num_of_nodes):
         for i in range(0, UAVs):
             node = 0
@@ -58,7 +58,6 @@ def calculateCircuits(positions, num_of_nodes, TravellingCost):
             if flag:
                 listV1[node] = 1
                 Set_S_source[i].append(positions[i])
-                #Set_S_destination[i].append(positions[i])
                 Set_S_destination[i].append(node)
                 Set_S_cost[i].append(futureCost)
                 positions[i] = node
@@ -73,7 +72,6 @@ def log_info(info):
     global TAG, debug
     if debug:
         rospy.loginfo(TAG + f"{info}")
-    #print(TAG)
 
 def odomCallback(msg):
     global odom, position
@@ -102,28 +100,19 @@ def process_boxes(msg):
     maxz = -99999
     for point in points:
         if minx > point.x:
-            #print("min x: " + str(point.x))
             minx = point.x
         if maxx < point.x:
-            #print("max x: " + str(point.x))
             maxx = point.x
 
         if miny > point.y:
-            #print("min y: " + str(point.y))
             miny = point.y
         if maxy < point.y:
-            #print("max y: " + str(point.y))
             maxy = point.y
 
         if minz > point.z:
-            #print("min z: " + str(point.z))
             minz = point.z
         if maxz < point.z:
-            #print("max z: " + str(point.z))
             maxz = point.z
-
-    #if debug:
-    #    print("min x: " + str(minx) + " max x: " + str(maxx) + "\nmin y: " + str(miny) + " max y: " + str(maxy) + "\nmin z: " + str(minz) + " max z: " + str(maxz))
 
     return [minx, maxx, miny, maxy, minz, maxz]
 
@@ -249,6 +238,7 @@ def main():
     rospy.wait_for_message("/"+namespace+"/adjacency_viz", MarkerArray)
     rate.sleep()
 
+    log_info("Waiting for waypoints")
     filename_msg = rospy.wait_for_message("/waypoints/"+namespace, String)
 
     if build_map:
@@ -259,8 +249,7 @@ def main():
             target_msg.y = point[1]
             target_msg.z = point[2]
             log_info("Setting target to point: " + str(point))
-            while not arrived:              #(euclidean_distance(point,position) >= area_details.resolution.data):
-                #log_info(euclidean_distance(point,position))
+            while not arrived:
                 target_pub.publish(target_msg)
                 rate.sleep()
             arrived = False
@@ -328,9 +317,6 @@ def main():
             for j in range(num_of_nodes):
                 adjacency[i,j] = euclidean_distance_3d(points[i],points[j])
 
-
-        
-
         log_info("Running mTSP")
         waypointsMatrix = calculateCircuits([i for i in range(num_of_agents)], num_of_nodes, adjacency)
         log_info("TSP Path length: " + str(len(waypointsMatrix[pos])))
@@ -354,8 +340,7 @@ def main():
 
     # Return to Home (ensure LOS with GCS)
     log_info("Setting target to initial point: " + str(init_pos))
-    while not arrived:              #(euclidean_distance(point,position) >= area_details.resolution.data):
-        #log_info(euclidean_distance(point,position))
+    while not arrived:
         target_pub.publish(init_pos)
         rate.sleep()
     arrived = False
@@ -365,11 +350,6 @@ def main():
         log_info("Finished")
         flag_pub.publish(bool_msg)
         rate.sleep()
-
-
-
-
-
 
 if __name__ == '__main__':
     try:

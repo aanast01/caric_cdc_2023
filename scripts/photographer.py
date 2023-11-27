@@ -1,6 +1,10 @@
 ### Photographer Trajectory Code ###
 #### Created By Kios ####
 ##### 21 Nov 2023 #####
+__author__ = "Andreas Anastasiou, Angelos Zacharia"
+__copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
+__version__ = "6.0"
+
 import sys
 import rospy
 from std_msgs.msg import Header, Float32, Bool, String

@@ -1,8 +1,12 @@
 ### UAV FoV Code ###
 #### Created By Kios ####
 ##### 16 Nov 2023 #####
+__author__ = "Andreas Anastasiou, Angelos Zacharia"
+__copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
+__version__ = "6.0"
+
 import rospy
-from std_msgs.msg import Header, Float32
+from std_msgs.msg import Float32
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, Point
 from kios_solution.msg import norms
@@ -29,7 +33,6 @@ def log_info(info):
     global TAG, debug
     if debug:
         rospy.loginfo(TAG + f"{info}")
-    #print(TAG)
 
 def odomCallback(msg):
     global odom, position
@@ -49,25 +52,9 @@ def closest_node_index(node, nodes):
 
 def vec_to_eurler(vector):
     global odom
-    
-    #vector = np.asarray((vector.x, vector.y, vector.z))
-    #vector /= np.linalg.norm(vector)
 
-    #print(agent_yaw)
     yaw = np.arctan2(-vector.y, -vector.x)
-
     pitch = np.arcsin(vector.z)
-
-
-
-    # # calculate pitch
-    # pitch = np.arcsin(-vector[2])
-    #print(pitch)
-
-    # # calculate yaw
-    # yaw = np.arctan2(-vector[1], -vector[0])
-    #print(yaw)
-
 
     return pitch, yaw
 
@@ -119,24 +106,8 @@ def main():
 
     while not rospy.is_shutdown():
         ind = closest_node_index(position, normals_msg.facet_mids)
-        #print(normals_msg.facet_mids[ind])
         normal_direction_position = normals_msg.normals[ind]
-        normal_direction_target = normals_msg.normals[target]
-
-        #print(normal_direction)
         pitch, yaw  = vec_to_eurler(normal_direction_position)
-        # pitch_tar, yaw_tar  = vec_to_eurler(normal_direction_target)
-
-        # pitch = (pitch_pos + pitch_tar) / 2
-        # yaw = (yaw_pos + yaw_tar) / 2
-        #print("pos: ", yaw_pos, "  tar: ", yaw_tar, "  fin: ", yaw)
-
-        # if abs(pitch) <= 0.5:
-        #     pitch = 0.0
-        # elif pitch > 0:
-        #     pitch = 1.57
-        # else:
-        #     pitch = -1.57
 
         gmb_cmd.linear.y = pitch # pitch
         gmb_cmd.linear.z = 0.0
@@ -145,7 +116,6 @@ def main():
     
         gmb_pub.publish(gmb_cmd)
         yaw_pub.publish(yaw_msg)
-        #log_info(gmb_cmd)
         rate.sleep()
 
 

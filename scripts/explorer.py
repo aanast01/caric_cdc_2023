@@ -1,6 +1,10 @@
 ### Explorer Trajectory Code ###
 #### Created By Kios ####
 ##### 13 Nov 2023 #####
+__author__ = "Andreas Anastasiou, Angelos Zacharia"
+__copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
+__version__ = "6.0"
+
 import rospy
 from std_msgs.msg import Header, Float32, Bool, String
 from nav_msgs.msg import Odometry
@@ -26,7 +30,6 @@ def sci_dijkstra(g, arrival_pub, s, t):
         arrived_msg = Bool()
         arrived_msg.data = True
         arrival_pub.publish(arrived_msg)
-        # log_info("ARRIVED")
         return [s,s]
     
     if (len(np.nonzero(g[s,:])[0]) == 0): 
@@ -60,7 +63,6 @@ def dijkstra(g, arrival_pub, s, t):
         arrived_msg = Bool()
         arrived_msg.data = True
         arrival_pub.publish(arrived_msg)
-        # log_info("ARRIVED")
         return [s,s]
     
     if (len(np.nonzero(g[s,:])[0]) == 0): 
@@ -86,21 +88,13 @@ def dijkstra(g, arrival_pub, s, t):
 
     last_w, curr_v = heapq.heappop(q)
 
-    # log_info(g[:,t])
     while  curr_v != t:
 
         neighbor_indices = np.nonzero(g[curr_v,:])
-        #log_info(neighbor_indices)
-        #for n, n_w in zip(nodes,g[curr_v]):
-        #log_info("kokos")
         for n in neighbor_indices[0]:
-            #log_info("kokos")
             n_w = g[curr_v,n]
-            #if n_w == 0:
-            #    continue
 
             cand_w = last_w + n_w # equivalent to d[curr_v] + n_w 
-            # print d # uncomment to see how deltas are updated
             if cand_w < d[n]:
                 d[n] = cand_w
                 p[n] = curr_v
@@ -111,13 +105,11 @@ def dijkstra(g, arrival_pub, s, t):
 
 def generate_path(parents, start, end):
         path = [end]
-        #log_info("Recreating path")
         while True:
             key = parents[path[0]]
             path.insert(0, key)
             if key == start:
                 break
-        #log_info("Returning path")
         return path
 
 maxVel = 0.0
@@ -155,7 +147,6 @@ def log_info(info):
     global TAG, debug
     if debug:
         rospy.loginfo(TAG + f"{info}")
-    #print(TAG)
 
 def odomCallback(msg):
     global odom
@@ -183,15 +174,10 @@ def euclidean_distance_3d(p1,p2):
 
 def constuct_adjacency(area_details, coordinates):
     global offsets_cross
-    # num_of_nodes = int(area_details.size.x * area_details.size.y * area_details.size.z)
     num_of_nodes = len(coordinates)
     adjacency_1 = np.zeros((num_of_nodes,num_of_nodes))
     log_info("Starting Adjacency calculation. Please wait... ")
-    #'''
     for _,coord in enumerate(coordinates):
-        # if i%2!=0:
-        #     continue
-        #start = rospy.Time.now().nsecs
         for _, offset in enumerate(offsets_cross):
             neighbor_x = coord[0]+(offset[0] * area_details.resolution.data)
             neighbor_y = coord[1]+(offset[1] * area_details.resolution.data)
@@ -202,7 +188,6 @@ def constuct_adjacency(area_details, coordinates):
             gone_too_far_y = (neighbor_y < area_details.minPoint.y) or (neighbor_y > (area_details.minPoint.y + area_details.size.y*area_details.resolution.data))
             gone_too_far_z = (neighbor_z < area_details.minPoint.z) or (neighbor_z > (area_details.minPoint.z + area_details.size.z*area_details.resolution.data))
             if gone_too_far_x or gone_too_far_y or gone_too_far_z:
-                #log_info(f"{gone_too_far_x}, {gone_too_far_y}, {gone_too_far_z}")
                 continue
             
             
@@ -211,7 +196,6 @@ def constuct_adjacency(area_details, coordinates):
             
             
             cost = euclidean_distance_3d(coord, coordinates[neighbor_index])
-            # if(cost <= area_details.resolution.data*2):
             try:
                 adjacency_1[my_index,neighbor_index] = cost
                 adjacency_1[neighbor_index,my_index] = cost
@@ -223,13 +207,9 @@ def constuct_adjacency(area_details, coordinates):
 def update_adjacency(adjacency, coordinates, obstacle_coordinates):    
     global grid_resolution
     adjacency_temp = np.copy(adjacency)
-    # for _, obstacle in enumerate(obstacle_coordinates.points):
+    # Add octomap voxel centers as obstacles in graph
     for _, obstacle in enumerate(sensor_msgs.point_cloud2.read_points(obstacle_coordinates, skip_nans=True, field_names=['x','y','z'])):
         index = closest_node_index_1((obstacle[0], obstacle[1], obstacle[2]), coordinates)
-        # delta_x = coordinates[index][0] - obstacle[0]#.x
-        # delta_y = coordinates[index][1] - obstacle[1]#.y
-        # delta_z = coordinates[index][2] - obstacle[2]#.z
-        # if np.linalg.norm([delta_x,delta_y,delta_z]) < grid_resolution:
         adjacency_temp[:,index] = 0
 
     adjacency_neigh = update_adjacency_with_neighbors(adjacency_temp)
@@ -239,6 +219,7 @@ def update_adjacency(adjacency, coordinates, obstacle_coordinates):
 def update_adjacency_with_neighbors(adjacency):
     global neighbors, grid_resolution, coordinates, area_details
 
+    # add LOS neighbors as obstacles in graph
     adjacency_temp = np.copy(adjacency)
     for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
         if point[3] != 0:
@@ -249,22 +230,19 @@ def update_adjacency_with_neighbors(adjacency):
                 neighbor_y = coordinates[index][1]+(offset[1] * grid_resolution)
                 neighbor_z = coordinates[index][2]+(offset[2] * grid_resolution)
             
-                
                 gone_too_far_x = (neighbor_x < area_details.minPoint.x) or (neighbor_x > (area_details.minPoint.x + area_details.size.x*area_details.resolution.data))
                 gone_too_far_y = (neighbor_y < area_details.minPoint.y) or (neighbor_y > (area_details.minPoint.y + area_details.size.y*area_details.resolution.data))
                 gone_too_far_z = (neighbor_z < area_details.minPoint.z) or (neighbor_z > (area_details.minPoint.z + area_details.size.z*area_details.resolution.data))
                 if gone_too_far_x or gone_too_far_y or gone_too_far_z:
-                    #log_info(f"{gone_too_far_x}, {gone_too_far_y}, {gone_too_far_z}")
                     continue
-                
-                
+              
                 neighbor_index = closest_node_index_1((neighbor_x, neighbor_y, neighbor_z),coordinates)
                 adjacency_temp[:,neighbor_index]=0
 
+    # mark isolated nodes as obstacles in graph
     arr = np.sum(adjacency_temp, axis=1)
     isolated_indicies = np.where(arr <= grid_resolution*2)[0]
     for _, index in enumerate(isolated_indicies):
-        #log_info("ISOLATED NODE: " + str(coordinates[index]))
         adjacency_temp[:,index] = 0
 
     return adjacency_temp
@@ -444,54 +422,6 @@ def go_to_point():
             cmdPub.publish(trajset_msg)
         rate.sleep()
 
-def take_off():
-    global cmd_pub, odom, waypoint
-    header_msg = Header()
-    header_msg.frame_id = 'world'
-    trajset_msg = MultiDOFJointTrajectory()
-    trajpt_msg = MultiDOFJointTrajectoryPoint()
-    transform_msgs = Transform()
-    translation_msg = Vector3()
-    rotation_msg = Quaternion()
-    zero_vector_msg = Vector3()
-    velocities_msg = Twist()
-    acceleration_msg = Twist()
-    
-
-    translation_msg.x = odom.pose.pose.position.x
-    translation_msg.y = odom.pose.pose.position.y
-    translation_msg.z = 1.5
-    rotation_msg.z = 3.14/4.0
-    rotation_msg.w = 3.14/4.0
-    
-    
-    # velocities_msg.linear.x = min((waypoint[0]-odom.pose.pose.position.x) * 1.0,3.0)
-    # velocities_msg.linear.y = min((waypoint[1]-odom.pose.pose.position.y) * 1.0,3.0)
-    # velocities_msg.linear.z = min((waypoint[2]-odom.pose.pose.position.z) * 1.0,2.0)
-    
-    
-    velocities_msg.linear = zero_vector_msg
-    velocities_msg.angular = zero_vector_msg
-    
-    acceleration_msg.linear = zero_vector_msg
-    acceleration_msg.angular = zero_vector_msg
-    
-    transform_msgs.translation = translation_msg
-    transform_msgs.rotation = rotation_msg
-    
-    trajpt_msg.transforms.append(transform_msgs)
-    trajpt_msg.velocities.append(velocities_msg)
-    trajpt_msg.accelerations.append(acceleration_msg)
-    
-    trajset_msg.points.append(trajpt_msg)
-    
-    header_msg.stamp = rospy.Time.now()
-    trajset_msg.header = header_msg
-
-    rate = rospy.Rate(10)
-    while odom.pose.pose.position.z < 1.2:
-        cmdPub.publish(trajset_msg)
-
 def publish_graph_viz(coords, adj):
     global waypoint, namespace, viz_pub
     marker_array = MarkerArray()
@@ -505,17 +435,10 @@ def publish_graph_viz(coords, adj):
             marker.scale.x = grid_resolution
             marker.scale.y = grid_resolution
             marker.scale.z = grid_resolution
-            #marker.color.a = 0.05
-            #index = closest_node_index(coord,coords)
-            
             marker.color.r = 1.0
             marker.color.g = 0.0
             marker.color.b = 0.0
             marker.color.a = 0.9
-            # else:
-            #     marker.color.r = 1.0
-            #     marker.color.g = 1.0
-            #     marker.color.b = 1.0
             marker.pose.orientation.w = 1.0
             marker.pose.position.x = coord[0]
             marker.pose.position.y = coord[1]
@@ -529,17 +452,10 @@ def publish_graph_viz(coords, adj):
             marker.scale.x = grid_resolution
             marker.scale.y = grid_resolution
             marker.scale.z = grid_resolution
-            #marker.color.a = 0.05
-            #index = closest_node_index(coord,coords)
-            
             marker.color.r = 1.0
             marker.color.g = 0.0
             marker.color.b = 1.0
             marker.color.a = 0.9
-            # else:
-            #     marker.color.r = 1.0
-            #     marker.color.g = 1.0
-            #     marker.color.b = 1.0
             marker.pose.orientation.w = 1.0
             marker.pose.position.x = coord[0]
             marker.pose.position.y = coord[1]
@@ -584,7 +500,6 @@ def main():
         debug = rospy.get_param('debug')
         grid_resolution = rospy.get_param('grid_resolution')
         set_tag("[" + namespace.upper() + " TRAJ SCRIPT]: ")
-        #rospy.loginfo(TAG + namespace)
     except Exception as e:
         print(e)
         namespace = "jurong"
@@ -633,13 +548,6 @@ def main():
         response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
         response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
 
-        
-    # log_info(response)
-    #response = create_ppcom_topic(namespace, ['all'], '/octomap_binary', 'kios_solution', 'area')
-    # Create the publisher
-    #msg_pub = rospy.Publisher('/world_coords', area, queue_size=1)
-
-
     # Get inspection area details
     log_info("Waiting for area details")
     area_details = rospy.wait_for_message("/world_coords/"+namespace, area)
@@ -651,8 +559,6 @@ def main():
 
     # Constructing the graph
     log_info("Constructing initial graph")
-    # nodes = [i for i in range(num_of_nodes)]
-    #nodes_int = [i for i in range(num_of_nodes)]
     coordinates = [(x,y,z) for x in xrange for y in yrange for z in zrange]
     np.savetxt("./"+namespace+"_coordinates.csv", coordinates, delimiter=",")
     start = time.time()
@@ -662,33 +568,18 @@ def main():
 
     
     # Get obstacles' coordinates
-    # log_info("Clearing agent position")
-    # try:
-    #     clear_agent_box(area_details.resolution.data, namespace)
-    # except:
-    #     pass
     log_info("Waiting for map")
-    # binary_map = rospy.wait_for_message('/'+namespace+'/octomap_binary', Octomap)
-    # log_info("Translating map")
-    # get_coords = rospy.ServiceProxy('/octomap_to_coords', OctomapToCoords)
-    # occupancy_coords = get_coords(octomap=binary_map)
     occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
-
 
     adjacency, adjacency_neigh = update_adjacency(adjacency_org, coordinates, occupancy_coords)
 
     publish_graph_viz(coordinates, adjacency)
 
     waypoint = (odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z)
-    #publish_graph_viz(viz_pub, coordinates, adjacency_org)
     # path planning and execution
     log_info("Waiting for target point")
     try:
         rospy.wait_for_message("/"+namespace+"/command/targetPoint", Point)
-        #take_off()
-        # one_sec = rospy.Duration(5)
-        # rospy.sleep(one_sec)
-        #target =  closest_node_index((target_point.x,target_point.y,target_point.z),coordinates)
     except rospy.exceptions.ROSException as e:
         log_info("Waiting for target point TIMEOUT")
         target =  closest_node_index((odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z),coordinates)
@@ -704,26 +595,12 @@ def main():
 
     while not rospy.is_shutdown():
         agent_index = closest_node_index_1(([odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z]),coordinates)
-        #log_info("Generating path. Starting Point: " + str(agent_index) + " Target Point: " + str(target))
         path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
         # path = sci_dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
         log_info("Going to point: " + str(coordinates[path[1]]))
         waypoint = coordinates[path[1]]
-        #while (euclidean_distance_3d([odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z],coordinates[path[1]]) > area_details.resolution.data/4):
-        #        go_to_point(coordinates[path[1]])
-        #        rate.sleep()
 
-        
-        # Get obstacles' coordinates
-        # try:
-        #     clear_agent_box(area_details.resolution.data, namespace)
-        # except:
-        #     pass
 
-        
-        # binary_map = rospy.wait_for_message('/'+namespace+'/octomap_binary', Octomap)
-        # get_coords = rospy.ServiceProxy('/octomap_to_coords', OctomapToCoords)
-        # occupancy_coords = get_coords(octomap=binary_map)
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
         occ_pub.publish(occupancy_coords)
 
@@ -731,13 +608,10 @@ def main():
             log_info("Updating map")
             mutex.acquire()
             adjacency, adjacency_neigh = update_adjacency(adjacency_org,coordinates, occupancy_coords)
-            #publish_graph_viz(viz_pub, coordinates, adjacency)
             mutex.release()
         else:
             mutex.acquire()
-            # adjacency = update_adjacency(adjacency_final,coordinates, occupancy_coords)
             adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
-            #publish_graph_viz(viz_pub, coordinates, adjacency_final)
             mutex.release()
             rate.sleep()
 

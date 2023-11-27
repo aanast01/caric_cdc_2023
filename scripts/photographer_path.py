@@ -1,16 +1,17 @@
 ### Photographer Path Planning Code ###
 #### Created By Kios ####
 ##### 21 Nov 2023 #####
+__author__ = "Andreas Anastasiou, Angelos Zacharia"
+__copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
+__version__ = "6.0"
+
 import sys
 import rospy
 from std_msgs.msg import String, Bool, Float32
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist, Point
+from geometry_msgs.msg import Point
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs.point_cloud2
-from kios_solution.msg import area, multiPoint
-from caric_mission.srv import CreatePPComTopic
-from visualization_msgs.msg import MarkerArray
 import numpy as np
 import math
 
@@ -37,12 +38,8 @@ def calculateCircuits(positions, num_of_nodes, TravellingCost):
     Set_S_destination = [[] for i in range(0, UAVs)]
     Set_S_cost = [[] for i in range(0, UAVs)]
     listV1 = [0 for i in range(0, num_of_nodes)]
-    # print("POSS: ",positions[:])
     for z in range(0, UAVs):
         listV1[positions[z]] = 1
-    # print positions
-    # print "before listV: ", listV1
-    # assignment of the first K nodes.
     while (sum(listV1) < num_of_nodes):
         for i in range(0, UAVs):
             node = 0
@@ -57,7 +54,6 @@ def calculateCircuits(positions, num_of_nodes, TravellingCost):
             if flag:
                 listV1[node] = 1
                 Set_S_source[i].append(positions[i])
-                #Set_S_destination[i].append(positions[i])
                 Set_S_destination[i].append(node)
                 Set_S_cost[i].append(futureCost)
                 positions[i] = node
@@ -73,7 +69,6 @@ def log_info(info):
     global TAG, debug
     if debug:
         rospy.loginfo(TAG + f"{info}")
-    #print(TAG)
 
 def odomCallback(msg):
     global odom, position
@@ -186,11 +181,8 @@ def main():
             velo_pub.publish(vel_msg)
         count += 0.5
     
-
-    # Return to Home (ensure LOS with GCS)
     log_info("Setting target to initial point: " + str(init_pos))
-    while not arrived:              #(euclidean_distance(point,position) >= area_details.resolution.data):
-        #log_info(euclidean_distance(point,position))
+    while not arrived:
         target_pub.publish(init_pos)
         rate.sleep()
     arrived = False
