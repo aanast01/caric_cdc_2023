@@ -701,8 +701,6 @@ def main():
     update_from_neighbor_thread = threading.Thread(target=update_from_neighbor, args=(coordinates,))
     update_from_neighbor_thread.start()
 
-    
-    #np.savetxt("/home/dronesteam/ws_caric/"+namespace+"_cost_matrix.csv", adjacency, delimiter=",")
 
     while not rospy.is_shutdown():
         agent_index = closest_node_index_1(([odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z]),coordinates)

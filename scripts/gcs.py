@@ -31,26 +31,65 @@ def generate_points_on_cuboid_faces(vertices, num_points_per_face=10):
     for face in faces:
         # Extract the vertices of the current face
         current_face = vertices[face]
- 
-        # Calculate two edges of the face
+        #Calculate face norm
+        normal = find_norm_from_face(DT, current_face)
+
+        # Calculate three edges of the face
         edge1 = current_face[1] - current_face[0]
         edge2 = current_face[2] - current_face[0]
- 
+        edge3 = current_face[2] - current_face[1]
+        edges = np.array([edge1,edge2,edge3])
+        len_edge1 = round(np.linalg.norm(edge1))
+        len_edge2 = round(np.linalg.norm(edge2))
+        len_edge3 = round(np.linalg.norm(edge3))
+        # Find perpendicular edges
+        ind = np.where(np.array([len_edge1, len_edge2, len_edge3])==max(len_edge1, len_edge2, len_edge3))[0]
+        if ind == 0:
+            common_point = current_face[2]
+            # print(common_point)
+            # print(current_face[1])
+            # print(current_face[0])
+            edge1 = current_face[1] - current_face[2]
+            edge2 = current_face[0] - current_face[2]
+        elif ind == 1:
+            common_point = current_face[1]
+            # print(common_point)
+            # print(current_face[2])
+            # print(current_face[0])
+            edge1 = current_face[2] - current_face[1]
+            edge2 = current_face[0] - current_face[1]
+        else:
+            common_point = current_face[0]
+            # print(common_point)
+            # print(current_face[1])
+            # print(current_face[2])
+            edge1 = current_face[1] - current_face[0]
+            edge2 = current_face[2] - current_face[0]
+
         # Generate points on the current face using parametric equations
-      
-        u = np.linspace(0, 1, num_points_per_face)
-        v = np.linspace(0, 1, num_points_per_face)
+        grid_res = rospy.get_param('grid_resolution')
+        num_points_x = max(3,int(round(np.linalg.norm(edge1))/grid_res))
+        num_points_y = max(3,int(round(np.linalg.norm(edge2))/grid_res))
+        print(num_points_x, ", ", num_points_y)
+        u = np.linspace(0, 1, num_points_x)
+        v = np.linspace(0, 1, num_points_y)
         u, v = np.meshgrid(u, v)
-        
-        normal = find_norm_from_face(DT, current_face)
+
+
         face_points = []
         face_norms = []
-        for i in range(1, num_points_per_face-1):
-            for j in range(1, num_points_per_face-i-1):
+        for i in range(1, num_points_y-1):
+            # print(i, "\n")
+            for j in range(1, num_points_x-1):
+                # print(j)
                 # Calculate the point on the face using parametric equations
-                point_on_face = current_face[0] + u[i][j] * edge2 + v[i][j] * edge1
-                face_points.append(point_on_face)
-                face_norms.append(normal)
+                try:
+                    point_on_face = common_point + u[i][j] * edge1 + v[i][j] * edge2
+                    face_points.append(point_on_face)
+                    face_norms.append(normal)
+                except Exception as e:
+                    print(i, " ", j)
+                    exit()
         
 
         all_points.extend(face_points)
@@ -60,8 +99,6 @@ def generate_points_on_cuboid_faces(vertices, num_points_per_face=10):
     all_points, ind = np.unique(all_points,axis=0, return_index=True)
     all_norms = np.array(all_norms)
     all_norms = all_norms[ind]
-    # np.savetxt("/home/dronesteam/ws_caric/_points.csv",all_points, delimiter=",")
-    # np.savetxt("/home/dronesteam/ws_caric/_norms.csv",all_norms, delimiter=",")
  
     return all_points, all_norms
 
@@ -433,8 +470,9 @@ def main():
         all_points = np.delete(all_points, delete_index, axis=0)
         all_norms = np.delete(all_norms, delete_index, axis=0)
     
-    np.savetxt("/home/dronesteam/ws_caric/_points.csv",all_points, delimiter=",")
-    np.savetxt("/home/dronesteam/ws_caric/_norms.csv",all_norms, delimiter=",")
+
+    np.savetxt("/home/dronesteam/ws_caric/points.csv",all_points, delimiter=",")
+    np.savetxt("/home/dronesteam/ws_caric/norms.csv",all_norms, delimiter=",")
 
     norm_msg = norms()
     for i in range(all_points.shape[0]):

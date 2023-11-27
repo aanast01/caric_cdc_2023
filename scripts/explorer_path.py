@@ -291,7 +291,11 @@ def main():
                 except:
                     pass
                 rate.sleep()
-        
+
+    vel_msg = Float32()
+    vel_msg.data = 3.0
+    velo_pub.publish(vel_msg)
+
 
     # Generate and go to TSP points
     log_info("Loading waypoints")
