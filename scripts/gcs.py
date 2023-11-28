@@ -413,12 +413,6 @@ def main():
         all_points = np.delete(all_points, delete_index, axis=0)
         all_norms = np.delete(all_norms, delete_index, axis=0)
 
-    try:
-        np.savetxt("/home/dronesteam/ws_caric/"+scenario+"_points.csv",all_points, delimiter=",")
-        np.savetxt("/home/dronesteam/ws_caric/"+scenario+"_norms.csv",all_norms, delimiter=",")
-    except:
-        pass
-
     log_info("Constructing norms message")
     norm_msg = norms()
     for i in range(all_points.shape[0]):

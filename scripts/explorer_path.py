@@ -331,7 +331,7 @@ def main():
                 rate.sleep()
             arrived = False
 
-        if count < 3:
+        if count < 2.0:
             vel_msg = Float32()
             vel_msg.data = 3.0 - count
             velo_pub.publish(vel_msg)
