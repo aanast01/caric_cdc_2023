@@ -3,7 +3,7 @@
 ##### 21 Nov 2023 #####
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
 __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
-__version__ = "6.0"
+__version__ = "7.0"
 
 import sys
 import rospy
@@ -53,7 +53,7 @@ def dijkstra(g, arrival_pub, s, t):
         return [s,s]
     
     if (len(np.nonzero(g[s,:])[0]) == 0): 
-        log_info("Source " + str(t) + " blocked")
+        log_info("Source " + str(s) + " blocked")
         arrived_msg = Bool()
         arrived_msg.data = True
         arrival_pub.publish(arrived_msg)
@@ -144,7 +144,7 @@ def update_adjacency_with_neighbors(adjacency_og):
     global neighbors, grid_resolution, coordinates, area_details
     adjacency_temp = np.copy(adjacency_og)
     for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
-        if point[3] != 0: 
+        if point[3] != 0 and point[2] >= 1: 
             index = closest_node_index_1((point[0], point[1], point[2]), coordinates)
             adjacency_temp[:,index]=0
             for q, offset in enumerate(offsets_cross):

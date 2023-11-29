@@ -3,20 +3,22 @@
 ##### 16 Nov 2023 #####
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
 __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
-__version__ = "6.0"
+__version__ = "7.0"
 
 import sys
 import rospy
 from std_msgs.msg import String, Bool, Float32
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud2, PointCloud
 import sensor_msgs.point_cloud2
-from kios_solution.msg import area
+from kios_solution.msg import area, norms
 from caric_mission.srv import CreatePPComTopic
 from visualization_msgs.msg import MarkerArray
-import numpy as np
+from scipy.spatial import Delaunay
+import numpy as np, pandas as pd
 import math
+import time
 
 build_map = True
 repeat = True
@@ -32,6 +34,13 @@ grid_resolution = 6
 namespace = "jurong"
 arrived = False
 drone_IDs = {'gcs':0, 'jurong':1, 'raffles':2, 'sentosa':3, 'changi':4, 'nanyang':5}
+
+def check_point_inside_cuboid(vertices, point):
+    DT = Delaunay(vertices)
+
+    if DT.find_simplex(point) >= 0:
+        return True
+    return False
 
 def calculateCircuits(positions, num_of_nodes, TravellingCost):
     UAVs = len(positions)
@@ -164,6 +173,19 @@ def main():
 
     # update flag publisher
     flag_pub = rospy.Publisher("/"+namespace+"/command/update", Bool, queue_size=1, latch=False)
+    # norm pub
+    norm_pub = rospy.Publisher("/"+namespace+"/norms", norms, queue_size=1)
+
+    # Get Bounding Box Verticies
+    bboxes = rospy.wait_for_message("/gcs/bounding_box_vertices/", PointCloud)
+    bbox_points = np.zeros((int(len(bboxes.points)/8),8,3))
+    counter = 0
+    for i in range(0,int(len(bboxes.points)/8)):
+        for j in range(8):
+            bbox_points[i,j,0] = bboxes.points[counter].x
+            bbox_points[i,j,1] = bboxes.points[counter].y
+            bbox_points[i,j,2] = bboxes.points[counter].z
+            counter += 1
 
     # Get inspection area details
     log_info("Waiting for area details")
@@ -216,30 +238,56 @@ def main():
             
                 target_points_raffles = np.array([[max_x, mid_y, mid_z],
                                                     [max_x, mid_y, max_z]])
+                
+        # points = np.concatenate((target_points_jurong, target_points_raffles))
+
+        # adjacency = np.zeros((points.shape[0],points.shape[0]))
+        # for i in range(points.shape[0]):
+        #     for j in range(points.shape[0]):
+        #         adjacency[i,j] = euclidean_distance_3d(points[i],points[j])
+
+        # log_info("Running mTSP")
+        # waypointsMatrix = calculateCircuits([i for i in range(num_of_agents)], num_of_nodes, adjacency)
     else:
-        p1 = np.array([mid_x, max_y+5.0, max_z])
-        p2 = np.array([mid_x, min_y, max_z])
+        max_y = max_y -10
+        min_y = min_y-5
+        p1 = np.array([mid_x-10, max_y, mid_z])
+        p2 = np.array([mid_x+10, max_y, mid_z])
+        p3 = np.array([mid_x-10, min_y, mid_z])
+        p4 = np.array([mid_x+10, min_y, mid_z])
         d1 = euclidean_distance(p1, init_pos)
         d2 = euclidean_distance(p2, init_pos)
-        if (d1 < d2):
-            target_points_jurong = np.array([p1,
-                                             p2])
-        else:
-            target_points_jurong = np.array([p2,
-                                             p1])
+        d3 = euclidean_distance(p3, init_pos)
+        d4 = euclidean_distance(p4, init_pos)
+        ind = np.where(np.array([d1, d2, d3, d4])==min(d1, d2, d3, d4))[0]
+        if ind==0:
+            target_points_jurong = np.array([p1,p3,p4,p2])
+        elif ind==1:
+            target_points_jurong = np.array([p2,p4,p3,p1])
+        elif ind==2:
+            target_points_jurong = np.array([p3,p1,p2,p4])
+        elif ind==3:
+            target_points_jurong = np.array([p4,p2,p1,p3])
 
 
+    
     if drone_IDs[namespace] == drone_IDs['jurong']:
+        # log_info("TSP Path length: " + str(len(waypointsMatrix[0])))
+        # if scenario != 'hangar':
+        #     target_points = waypointsMatrix[0]
+        # else:
         target_points = target_points_jurong
     else:
+        # log_info("TSP Path length: " + str(len(waypointsMatrix[1])))
+        # target_points = waypointsMatrix[1]
         target_points = target_points_raffles
 
     log_info("Waiting for adjacency build")
     rospy.wait_for_message("/"+namespace+"/adjacency_viz", MarkerArray)
     rate.sleep()
 
-    log_info("Waiting for waypoints")
-    filename_msg = rospy.wait_for_message("/waypoints/"+namespace, String)
+    # log_info("Waiting for waypoints")
+    # filename_msg = rospy.wait_for_message("/waypoints/"+namespace, String)
 
     if build_map:
         # go to initial points for map building
@@ -287,29 +335,104 @@ def main():
 
 
     # Generate and go to TSP points
-    log_info("Loading waypoints")
-    cleared_inspect_points = np.loadtxt(filename_msg.data, delimiter=",")
+    log_info("Loading map")
+    # cleared_inspect_points = np.loadtxt(filename_msg.data, delimiter=",")
+    filename_msg = rospy.wait_for_message("/"+namespace+"/adjacency/", String)
+    # start = time.time()
+    adjacency = np.loadtxt(filename_msg.data, delimiter=",")
+    # duration = time.time() - start
+    # log_info("Numpy Load Map Time: " +  str(duration) + "s")
+    # start = time.time()
+    # adjacency = pd.read_csv(filename_msg.data, delimiter=",").values
+    # duration = time.time() - start
+    # log_info("Pandas Load Map Time: " +  str(duration) + "s")
+
+    coordinates = np.loadtxt("./"+namespace+"_coordinates.csv", delimiter=",")
+    # coordinates = pd.read_csv("./"+namespace+"_coordinates.csv", delimiter=",").values
+    # print(adjacency.shape)
+    # print(coordinates.shape)
+
+
+    start = time.time()
+    arr = np.sum(adjacency, axis=0)
+    valid_dist_indices = np.where(arr == 0)[0]
+    log_info("Calculating waypoints")
+    targeted_points = np.empty((0,1))
+    inspect_points = np.empty((0,1))
+    for index in valid_dist_indices:
+            for box_i in range(0,int(len(bboxes.points)/8)):
+                if check_point_inside_cuboid(bbox_points[box_i], coordinates[index]):
+                    targeted_points = np.append(targeted_points, index)
+                    break
+    duration = time.time() - start
+    log_info("Find Target Voxels Time: " +  str(duration) + "s")
+
+    start = time.time()
+    targeted_points = targeted_points.astype(int)
+    all_norms = np.empty((0,3))
+    for target_point in targeted_points:
+        # target_point = int(target_point)
+        points = np.where(adjacency[target_point]>0)[0]
+        inspect_points = np.append(inspect_points, points)
+        for point in points:
+            norm = coordinates[point] - coordinates[target_point]
+            norm /= np.linalg.norm(norm)
+            all_norms = np.append(all_norms, [norm], axis=0)
+    duration = time.time() - start
+    log_info("Calculate Norms Time: " +  str(duration) + "s")
+
+    log_info("Running unique")
+    inspect_points, ind = np.unique(inspect_points,axis=0, return_index=True)
+    all_norms = all_norms[ind]
+    inspect_points = inspect_points.astype(int)
+
+    # np.savetxt("./"+namespace+"_newPoints.csv", coordinates[inspect_points], delimiter=',')
+
+    log_info("Constructing norms message")
+    start = time.time()
+    norm_msg = norms()
+    for i, point in enumerate(inspect_points):
+        facet_mid = Point()
+        facet_mid.x = coordinates[point,0]
+        facet_mid.y = coordinates[point,1]
+        facet_mid.z = coordinates[point,2]
+        norm_msg.facet_mids.append(facet_mid)
+        norm_point = Point()
+        norm_point.x = all_norms[i,0]
+        norm_point.y = all_norms[i,1]
+        norm_point.z = all_norms[i,2]
+        norm_msg.normals.append(norm_point)
+    duration = time.time() - start
+    log_info("Build Norms Message Time: " +  str(duration) + "s")
+
+    norm_pub.publish(norm_msg)
     count = 0
     while repeat:
-        neighbors = rospy.wait_for_message("/"+namespace+"/nbr_odom_cloud", PointCloud2)
+        log_info("Constructing TSP matrix")
+        neighbors = PointCloud2()
+        try:
+            neighbors = rospy.wait_for_message("/"+namespace+"/nbr_odom_cloud", PointCloud2,2)
+        except:
+            pass
         uav_positions = np.empty((0,3))
         uav_indices = np.array([])
         for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
             if point[3] != drone_IDs['gcs']:
-                log_info(point[3])
+                # log_info(point[3])
                 uav_positions = np.append(uav_positions, [[point[0], point[1], point[2]]], axis=0)
                 uav_indices = np.append(uav_indices, point[3])
+
         pos = 0
-        while uav_indices[pos] < drone_IDs[namespace]:
-            pos += 1
+        if(uav_positions.shape[0]!=0):
+            while uav_indices[pos] < drone_IDs[namespace]:
+                pos += 1
         
         uav_positions = np.insert(uav_positions, pos, [position.x, position.y, position.z], axis=0)
         uav_indices = np.insert(uav_indices, pos, drone_IDs[namespace])
 
         num_of_agents = uav_positions.shape[0]
 
-
-        points = np.concatenate((uav_positions, cleared_inspect_points))
+        points = np.concatenate((uav_positions, coordinates[inspect_points]))
         num_of_nodes = points.shape[0]
 
         adjacency = np.zeros((num_of_nodes,num_of_nodes))

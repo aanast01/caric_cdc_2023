@@ -3,7 +3,7 @@
 ##### 13 Nov 2023 #####
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
 __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
-__version__ = "6.0"
+__version__ = "7.0"
 
 import rospy
 from std_msgs.msg import Header, Float32, Bool, String
@@ -112,7 +112,7 @@ def generate_path(parents, start, end):
                 break
         return path
 
-maxVel = 0.0
+maxVel = 4.0
 debug = False
 TAG = ""
 odom = Odometry()
@@ -155,7 +155,10 @@ def odomCallback(msg):
 def targetCallback(msg):
     global target, coordinates
     target_point = msg
-    target =  closest_node_index((target_point.x,target_point.y,target_point.z),coordinates)
+    try:
+        target =  closest_node_index((target_point.x,target_point.y,target_point.z),coordinates)
+    except:
+        pass
 
 def yawCallback(msg):
     global target_yaw
@@ -207,11 +210,16 @@ def constuct_adjacency(area_details, coordinates):
 def update_adjacency(adjacency, coordinates, obstacle_coordinates):    
     global grid_resolution
     adjacency_temp = np.copy(adjacency)
+    clear_agent_box(6, namespace)
     # Add octomap voxel centers as obstacles in graph
-    for _, obstacle in enumerate(sensor_msgs.point_cloud2.read_points(obstacle_coordinates, skip_nans=True, field_names=['x','y','z'])):
+    inds = np.empty((0))
+    for _, obstacle in obstacle_coordinates:
         index = closest_node_index_1((obstacle[0], obstacle[1], obstacle[2]), coordinates)
-        adjacency_temp[:,index] = 0
+        inds = np.append(inds, [index], axis=0)
 
+    inds = inds.astype(int)
+    adjacency_temp[:,inds] = 0
+    
     adjacency_neigh = update_adjacency_with_neighbors(adjacency_temp)
 
     return adjacency_temp, adjacency_neigh
@@ -221,8 +229,9 @@ def update_adjacency_with_neighbors(adjacency):
 
     # add LOS neighbors as obstacles in graph
     adjacency_temp = np.copy(adjacency)
+
     for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
-        if point[3] != 0:
+        if point[3] != 0 and point[2] >= 1:
             index = closest_node_index_1((point[0], point[1], point[2]), coordinates)
             adjacency_temp[:,index]=0
             for _, offset in enumerate(offsets_cross):
@@ -258,7 +267,7 @@ def update_from_neighbor(coordinates):
 
     rospy.wait_for_message("/"+namespace+"/command/update", Bool)
     rate = rospy.Rate(1)
-    # clear_agent_box(4, namespace)
+    
     if scenario != 'hangar':
         occupancy_coords = PointCloud2()
         log_info("Waiting for neighbor map")
@@ -282,10 +291,12 @@ def update_from_neighbor(coordinates):
         flag_pub2.publish(bool_msg)
         log_info("Merging map")
         flag_pub2.publish(bool_msg)
+        occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
         adjacency_final, _ = update_adjacency(adjacency, coordinates, occupancy_coords)
         flag_pub2.publish(bool_msg)
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
         flag_pub2.publish(bool_msg)
+        occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
         adjacency_final, _ = update_adjacency(adjacency_final, coordinates, occupancy_coords)
         flag_pub2.publish(bool_msg)
         mutex.release()
@@ -297,11 +308,13 @@ def update_from_neighbor(coordinates):
         mutex.acquire()
         log_info("Final map update")
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
+        occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
         adjacency_final, _ = update_adjacency(adjacency, coordinates, occupancy_coords)
         mutex.release()
         log_info("Final map update DONE")
 
     filename = "./"+namespace+"_adjacency.csv"
+    print(adjacency_final.shape)
     np.savetxt(filename, adjacency_final, delimiter=",")
     filename_str = String()
     filename_str.data = filename
@@ -316,11 +329,8 @@ def get_node_index(coordinates, x,y,z):
     return coordinates.index((x, y, z))
 
 def closest_node_index_1(node, nodes):
-    nodes = np.asarray(nodes)
-    deltas = nodes - node
-    dist_2 = np.einsum('ij,ij->i', deltas, deltas)
-
-    return np.argmin(dist_2)
+    distances = np.linalg.norm(nodes - node, axis=1)
+    return np.argmin(distances)
 
 def closest_node_index(node, nodes):
     global adjacency
@@ -559,20 +569,23 @@ def main():
 
     # Constructing the graph
     log_info("Constructing initial graph")
-    coordinates = [(x,y,z) for x in xrange for y in yrange for z in zrange]
+    coordinates = np.asarray([(x,y,z) for x in xrange for y in yrange for z in zrange])
+
     np.savetxt("./"+namespace+"_coordinates.csv", coordinates, delimiter=",")
     start = time.time()
     adjacency_org = constuct_adjacency(area_details, coordinates)
     duration = time.time() - start
     log_info("Adjacency Build Time: " +  str(duration) + "s")
 
-    
+
     # Get obstacles' coordinates
-    log_info("Waiting for map")
+    log_info("Waiting for octomap")
     occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
-
+    log_info("translating octomap")
+    occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
+    log_info("calling adjacency update")
     adjacency, adjacency_neigh = update_adjacency(adjacency_org, coordinates, occupancy_coords)
-
+    log_info("publishing adjacency")
     publish_graph_viz(coordinates, adjacency)
 
     waypoint = (odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z)
@@ -594,7 +607,7 @@ def main():
 
 
     while not rospy.is_shutdown():
-        agent_index = closest_node_index_1(([odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z]),coordinates)
+        agent_index = closest_node_index_1((odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z),coordinates)
         path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
         # path = sci_dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
         log_info("Going to point: " + str(coordinates[path[1]]))
@@ -603,6 +616,8 @@ def main():
 
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
         occ_pub.publish(occupancy_coords)
+        occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
+
 
         if update:
             log_info("Updating map")

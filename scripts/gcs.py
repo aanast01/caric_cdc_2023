@@ -3,7 +3,7 @@
 ##### 10 Nov 2023 #####
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
 __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
-__version__ = "6.0"
+__version__ = "7.0"
 
 import rospy
 from std_msgs.msg import String

@@ -3,7 +3,7 @@
 ##### 16 Nov 2023 #####
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
 __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
-__version__ = "6.0"
+__version__ = "7.0"
 
 import rospy
 from std_msgs.msg import Float32
@@ -61,8 +61,10 @@ def vec_to_eurler(vector):
 def targetCallback(msg):
     global target, normals_msg
     target_point = msg
-    target =  closest_node_index(target_point,normals_msg.facet_mids)
-
+    try:
+        target =  closest_node_index(target_point,normals_msg.facet_mids)
+    except:
+        pass
 
 def main():
     # init
@@ -94,7 +96,7 @@ def main():
 
     # Get inspection norms
     log_info("Waiting for normals details")
-    normals_msg = rospy.wait_for_message("/norms/"+namespace, norms)#
+    normals_msg = rospy.wait_for_message("/"+namespace+"/norms/", norms)#
     #log_info(normals_msg)
 
 
