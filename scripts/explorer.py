@@ -314,7 +314,6 @@ def update_from_neighbor(coordinates):
         log_info("Final map update DONE")
 
     filename = "./"+namespace+"_adjacency.csv"
-    print(adjacency_final.shape)
     np.savetxt(filename, adjacency_final, delimiter=",")
     filename_str = String()
     filename_str.data = filename

@@ -210,34 +210,38 @@ def main():
         # if x dimension is longest
         if (max_x >= max_y) and (max_x >= max_z):
             target_points_jurong = np.array([[min_x, max_y, mid_z],
-                                                [max_x, max_y, mid_z]])
+                                             [max_x, max_y, mid_z],
+                                             [mid_x, max_y, max_z]])
             
             target_points_raffles = np.array([[min_x, min_y, mid_z],
-                                                [max_x, min_y, mid_z]])
+                                              [max_x, min_y, mid_z],
+                                              [mid_x, min_y, max_z]])
         # if y dimension is longest
         elif (max_y >= max_x) and (max_y >= max_z):
             target_points_jurong = np.array([[min_x, min_y, mid_z],
-                                                [min_x, max_y, mid_z]])
+                                             [min_x, max_y, mid_z],
+                                             [min_x, mid_y, max_z]])
             
             target_points_raffles = np.array([[max_x, min_y, mid_z],
-                                                [max_x, max_y, mid_z]])
+                                              [max_x, max_y, mid_z],
+                                              [max_x, mid_y, max_z]])
         # if z dimension is longest
         elif (max_z >= max_x) and (max_z >= max_y):
             # if x dimension is longer than y
             if (max_x >= max_y):
                 target_points_jurong = np.array([[mid_x, min_y, mid_z],
-                                                    [mid_x, min_y, max_z]])
+                                                 [mid_x, min_y, max_z]])
                 
                 target_points_raffles = np.array([[mid_x, max_y, mid_z],
-                                                    [mid_x, max_y, max_z]])
+                                                  [mid_x, max_y, max_z]])
                 
             # if y dimension is longer than x
             else: 
                 target_points_jurong = np.array([[min_x, mid_y, mid_z],
-                                                [min_x, mid_y, max_z]])
+                                                 [min_x, mid_y, max_z]])
             
                 target_points_raffles = np.array([[max_x, mid_y, mid_z],
-                                                    [max_x, mid_y, max_z]])
+                                                  [max_x, mid_y, max_z]])
                 
         # points = np.concatenate((target_points_jurong, target_points_raffles))
 
@@ -353,7 +357,7 @@ def main():
     # print(coordinates.shape)
 
 
-    start = time.time()
+    # start = time.time()
     arr = np.sum(adjacency, axis=0)
     valid_dist_indices = np.where(arr == 0)[0]
     log_info("Calculating waypoints")
@@ -364,10 +368,10 @@ def main():
                 if check_point_inside_cuboid(bbox_points[box_i], coordinates[index]):
                     targeted_points = np.append(targeted_points, index)
                     break
-    duration = time.time() - start
-    log_info("Find Target Voxels Time: " +  str(duration) + "s")
+    # duration = time.time() - start
+    # log_info("Find Target Voxels Time: " +  str(duration) + "s")
 
-    start = time.time()
+    # start = time.time()
     targeted_points = targeted_points.astype(int)
     all_norms = np.empty((0,3))
     for target_point in targeted_points:
@@ -378,8 +382,8 @@ def main():
             norm = coordinates[point] - coordinates[target_point]
             norm /= np.linalg.norm(norm)
             all_norms = np.append(all_norms, [norm], axis=0)
-    duration = time.time() - start
-    log_info("Calculate Norms Time: " +  str(duration) + "s")
+    # duration = time.time() - start
+    # log_info("Calculate Norms Time: " +  str(duration) + "s")
 
     log_info("Running unique")
     inspect_points, ind = np.unique(inspect_points,axis=0, return_index=True)
@@ -389,7 +393,7 @@ def main():
     # np.savetxt("./"+namespace+"_newPoints.csv", coordinates[inspect_points], delimiter=',')
 
     log_info("Constructing norms message")
-    start = time.time()
+    # start = time.time()
     norm_msg = norms()
     for i, point in enumerate(inspect_points):
         facet_mid = Point()
@@ -402,8 +406,8 @@ def main():
         norm_point.y = all_norms[i,1]
         norm_point.z = all_norms[i,2]
         norm_msg.normals.append(norm_point)
-    duration = time.time() - start
-    log_info("Build Norms Message Time: " +  str(duration) + "s")
+    # duration = time.time() - start
+    # log_info("Build Norms Message Time: " +  str(duration) + "s")
 
     norm_pub.publish(norm_msg)
     count = 0
