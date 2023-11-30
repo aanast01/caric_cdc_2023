@@ -1,9 +1,8 @@
-### UAV FoV Code ###
-#### Created By Kios ####
-##### 16 Nov 2023 #####
+######################### UAV FoV Code ########################
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
 __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
 __version__ = "7.0"
+##############################################################
 
 import rospy
 from std_msgs.msg import Float32
@@ -66,6 +65,10 @@ def targetCallback(msg):
     except:
         pass
 
+def normCallback(msg):
+    global normals_msg
+    normals_msg = msg
+
 def main():
     # init
     global grid_resolution, namespace, debug, odom, position, target, normals_msg
@@ -84,27 +87,22 @@ def main():
         set_tag("[" + namespace.upper() + " FOV SCRIPT]: ")
 		
     rospy.init_node(namespace, anonymous=True)
-    log_info(namespace)
-
     rate = rospy.Rate(10)
 
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
     # subscribe to target point
     rospy.Subscriber("/"+namespace+"/command/targetPoint", Point, targetCallback)
-
-
+    rospy.Subscriber("/"+namespace+"/norms/", norms, normCallback)
     # Get inspection norms
     log_info("Waiting for normals details")
-    normals_msg = rospy.wait_for_message("/"+namespace+"/norms/", norms)#
-    #log_info(normals_msg)
-
+    rospy.wait_for_message("/"+namespace+"/norms/", norms)
 
     # Create the publisher
     gmb_pub = rospy.Publisher('/'+namespace+'/command/gimbal', Twist, queue_size=1)
     yaw_pub = rospy.Publisher('/'+namespace+'/command/yaw', Float32, queue_size=1)
     gmb_cmd = Twist()
-    gmb_cmd.linear.x = 1.0 # set gimbal to target position
+    gmb_cmd.linear.x = 1.0
 
     while not rospy.is_shutdown():
         ind = closest_node_index(position, normals_msg.facet_mids)
@@ -119,8 +117,6 @@ def main():
         gmb_pub.publish(gmb_cmd)
         yaw_pub.publish(yaw_msg)
         rate.sleep()
-
-
 
 if __name__ == '__main__':
     try:

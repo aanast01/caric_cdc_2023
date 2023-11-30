@@ -1,9 +1,8 @@
-### Photographer Path Planning Code ###
-#### Created By Kios ####
-##### 21 Nov 2023 #####
+############### Photographer Path Planning Code ##############
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
 __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
 __version__ = "7.0"
+##############################################################
 
 import sys
 import rospy
@@ -14,10 +13,9 @@ from sensor_msgs.msg import PointCloud2, PointCloud
 from kios_solution.msg import norms, area
 import sensor_msgs.point_cloud2
 from scipy.spatial import Delaunay
-import numpy as np, pandas as pd
+import numpy as np
 import math
 import traceback
-
 
 repeat = True
 debug = False
@@ -157,15 +155,11 @@ def main():
         set_tag("[" + namespace.upper() + " PATH SCRIPT]: ")
 		
     rospy.init_node(namespace, anonymous=True)
-    log_info(namespace)
-
     rate = rospy.Rate(10)
 
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
-    
     rospy.Subscriber("/"+namespace+"/arrived_at_target", Bool, arrivedCallback)
-
 
     # target point publisher
     target_pub = rospy.Publisher("/"+namespace+"/command/targetPoint", Point, queue_size=1)
@@ -182,7 +176,7 @@ def main():
     zrange = range(int(area_details.minPoint.z + area_details.resolution.data/2), int(area_details.minPoint.z + area_details.size.z * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
     # Constructing the graph
     coordinates = np.asarray([(x,y,z) for x in xrange for y in yrange for z in zrange]).astype(float)
-    adjacency = constuct_adjacency(area_details, coordinates)
+    adjacency_org = constuct_adjacency(area_details, coordinates)
 
     # Get Bounding Box Verticies
     bboxes = rospy.wait_for_message("/gcs/bounding_box_vertices/", PointCloud)
@@ -194,39 +188,33 @@ def main():
             bbox_points[i,j,1] = bboxes.points[counter].y
             bbox_points[i,j,2] = bboxes.points[counter].z
             counter += 1
-
-    # filename_msg = rospy.wait_for_message("/waypoints/"+namespace, String)
     
     log_info("Waiting for traj script")
     rospy.wait_for_message("/"+namespace+"/arrived_at_target", Bool)
     init_pos = position
     rate.sleep()
 
-
-    # # Generate and go to TSP points
-    # log_info("Loading waypoints")
-    # cleared_inspect_points = np.loadtxt(filename_msg.data, delimiter=",")
+    # Generate and go to TSP points
     count = 0
     while repeat:
         log_info("Waiting for map from explorers")
         occupied_indicies = Int16MultiArray()
-        explorer_name = "jurong"
         while len(occupied_indicies.data) == 0:
             try:
                 occupied_indicies = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray,1)
                 log_info("Receivied map from Jurong")
-                explorer_name = "jurong"
             except rospy.exceptions.ROSException as e:
                 try:
                     occupied_indicies = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray,1)
                     log_info("Receivied map from Raffles")
-                    explorer_name = "raffles"
                 except rospy.exceptions.ROSException as e:
                     pass
                     # log_info("Waiting for map from explorers")
             rate.sleep() 
         log_info("Loading map")
+        adjacency = np.copy(adjacency_org)
         valid_dist_indices =  np.asarray(occupied_indicies.data)
+        adjacency[:,valid_dist_indices] = 0
         log_info("Calculating waypoints")
         targeted_points = np.empty((0,1))
         inspect_points = np.empty((0,1))
@@ -309,9 +297,9 @@ def main():
 
         if count < 2.0:
             vel_msg = Float32()
-            vel_msg.data = 3.0 - count
+            vel_msg.data = 4.0 - count
             velo_pub.publish(vel_msg)
-        count += 0.5
+        count += 1.0
     
     log_info("Setting target to initial point: " + str(init_pos))
     while not arrived:

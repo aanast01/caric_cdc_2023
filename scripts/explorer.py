@@ -5,7 +5,7 @@ __version__ = "7.0"
 ##############################################################
 
 import rospy
-from std_msgs.msg import Header, Float32, Bool, Int16MultiArray, Int16
+from std_msgs.msg import Header, Float32, Bool, Int16MultiArray
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs.point_cloud2
@@ -19,7 +19,6 @@ import math
 import numpy as np
 import heapq
 import threading
-import time
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import shortest_path
 import traceback
@@ -31,6 +30,7 @@ odom = Odometry()
 target = 0
 neighbors = PointCloud2()
 command_thread = None
+update_from_neighbor_thread = None
 cmdPub = None
 coordinates = None
 target_yaw = 0.0
@@ -200,8 +200,8 @@ def constuct_adjacency(area_details, coordinates):
             
             # cost = euclidean_distance_3d(coord, coordinates[neighbor_index])
             try:
-                adjacency_1[my_index,neighbor_index] = 1 #cost
-                adjacency_1[neighbor_index,my_index] = 1 #cost
+                adjacency_1[my_index,neighbor_index] = 1#cost
+                adjacency_1[neighbor_index,my_index] = 1#cost
             except:
                 pass
 
@@ -332,9 +332,6 @@ def update_from_neighbor(coordinates):
         publish_graph_viz(coordinates, adjacency)
         rate.sleep
 
-def get_node_index(coordinates, x,y,z):
-    return coordinates.index((x, y, z))
-
 def closest_node_index_1(node, nodes):
     distances = np.linalg.norm(nodes - node, axis=1)
     return np.argmin(distances)
@@ -447,9 +444,9 @@ def publish_text_viz(msg):
     marker.type = marker.TEXT_VIEW_FACING
     marker.text = msg
     marker.action = marker.ADD
-    marker.scale.x = 5.0
-    marker.scale.y = 5.0
-    marker.scale.z = 5.0
+    marker.scale.x = 3.0
+    marker.scale.y = 3.0
+    marker.scale.z = 3.0
     marker.color.a = 1.0
     marker.color.r = 0.0
     if namespace == "jurong":
@@ -462,7 +459,7 @@ def publish_text_viz(msg):
         marker.pose.position.y = -57.0
     marker.pose.orientation.w = 1.0
     marker.pose.position.x = 0.0
-    marker.pose.position.z = 0.0
+    marker.pose.position.z = 30.0
 
     viz_pub.publish(marker)
 
@@ -536,7 +533,7 @@ def publish_graph_viz(coords, adj):
 
 def main():
     # init
-    global cmdPub, waypoint, command_thread, coordinates, target, grid_resolution, scenario
+    global cmdPub, waypoint, command_thread, update_from_neighbor_thread, coordinates, target, grid_resolution, scenario
     global namespace, debug, adjacency, update, mutex, adjacency_final, area_details, viz_pub
     try:
         namespace = rospy.get_param('namespace') # node_name/argsname
@@ -657,8 +654,7 @@ def main():
             else:
                 adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
             # publish_text_viz("")
-        
-        
+            
         
 if __name__ == '__main__':
     try:
@@ -666,14 +662,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("terminating...")
         command_thread.terminate()
-        filename1 = "./"+namespace+"_adjacency.csv"
-        filename2 = "./"+namespace+"_coordinates.csv"
-        import os
-        try:
-            os.remove(filename1)
-        except:
-            pass
-        os.remove(filename2)
+        update_from_neighbor_thread.terminte()
     except Exception as e:
         traceback.print_exc()
     finally:

@@ -1,11 +1,9 @@
-### Photographer Trajectory Code ###
-#### Created By Kios ####
-##### 21 Nov 2023 #####
+################ Photographer Trajectory Code ################
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
 __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
 __version__ = "7.0"
+##############################################################
 
-import sys
 import rospy
 from std_msgs.msg import Header, Float32, Bool, Int16MultiArray
 from nav_msgs.msg import Odometry
@@ -13,9 +11,7 @@ from sensor_msgs.msg import PointCloud2
 import sensor_msgs.point_cloud2
 from trajectory_msgs.msg import MultiDOFJointTrajectory, MultiDOFJointTrajectoryPoint
 from geometry_msgs.msg import Transform, Vector3, Quaternion, Twist, Point
-from caric_mission.srv import CreatePPComTopic
 from kios_solution.msg import area
-from octomap_msgs.srv import BoundingBoxQuery
 from visualization_msgs.msg import MarkerArray, Marker
 import math
 import numpy as np
@@ -23,8 +19,7 @@ import heapq
 import threading
 import traceback
 
-
-maxVel = 3.0
+maxVel = 4.0
 debug = False
 TAG = ""
 odom = Odometry()
@@ -38,6 +33,11 @@ grid_resolution = 6
 namespace = "sentosa"
 adjacency = np.zeros((2,2))
 
+offsets_all = [
+    (-1,-1,0), (0,-1,0), (1,-1,0), (1,0,0), (1,1,0), (0,1,0), (-1,1,0), (-1,0,0), 
+    (-1,-1,1), (0,-1,1), (1,-1,1), (1,0,1), (1,1,1), (0,1,1), (-1,1,1), (-1,0,1),(0,0,1),
+    (-1,-1,-1), (0,-1,-1), (1,-1,-1), (1,0,-1), (1,1,-1), (0,1,-1), (-1,1,-1), (-1,0,-1),(0,0,-1)
+]
 offsets_cross = [
     (0,-1,0), (1,0,0), (0,1,0), (-1,0,0), (0,0,1), (0,0,-1)
 ]
@@ -150,7 +150,7 @@ def constuct_adjacency(area_details, coordinates):
     adjacency_1 = np.zeros((num_of_nodes,num_of_nodes))
     log_info("Starting Adjacency calculation. Please wait... ")
     for _,coord in enumerate(coordinates):
-        for _, offset in enumerate(offsets_cross):
+        for _, offset in enumerate(offsets_all):
             neighbor_x = coord[0]+(offset[0] * area_details.resolution.data)
             neighbor_y = coord[1]+(offset[1] * area_details.resolution.data)
             neighbor_z = coord[2]+(offset[2] * area_details.resolution.data)
@@ -385,8 +385,6 @@ def main():
         set_tag("[" + namespace.upper() + " TRAJ SCRIPT]: ")
 		
     rospy.init_node(namespace, anonymous=True)
-    log_info(namespace)
-
     rate = rospy.Rate(10)
 
     # subscribe to self topics
@@ -413,7 +411,7 @@ def main():
     zrange = range(int(area_details.minPoint.z + area_details.resolution.data/2), int(area_details.minPoint.z + area_details.size.z * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
     # Constructing the graph
     coordinates = np.asarray([(x,y,z) for x in xrange for y in yrange for z in zrange])
-    adjacency_final = constuct_adjacency(area_details, coordinates)
+    adjacency_org = constuct_adjacency(area_details, coordinates)
 
     # create thread
     waypoint = (-3000,-3000,-3000)
@@ -422,17 +420,14 @@ def main():
 
     occupied_msg = Int16MultiArray()
     log_info("Waiting for map from explorers")
-    explorer_name = "jurong"
     while len(occupied_msg.data) == 0:
         try:
             occupied_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray, 1)
             log_info("Receivied map from Jurong")
-            explorer_name = "jurong"
         except rospy.exceptions.ROSException as e:
             try:
                 occupied_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray, 1)
                 log_info("Receivied map from Raffles")
-                explorer_name = "raffles"
             except rospy.exceptions.ROSException as e:
                 pass
                 # log_info("Waiting for map from explorers")
@@ -440,8 +435,9 @@ def main():
     
     log_info("Loading map")
     occupied_indicies = np.asarray(occupied_msg.data)
-    adjacency_final[:,occupied_indicies] = 0
-    adjacency = update_adjacency_with_neighbors(adjacency_final)
+    adjacency = np.copy(adjacency_org)
+    adjacency[:,occupied_indicies] = 0
+    adjacency_neigh = update_adjacency_with_neighbors(adjacency)
     publish_graph_viz()
 
     log_info("Waiting for target point")
@@ -455,7 +451,7 @@ def main():
     while not rospy.is_shutdown():
         agent_index = closest_node_index_1(([odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z]),coordinates)
         #log_info("Generating path. Starting Point: " + str(agent_index) + " Target Point: " + str(target))
-        path = dijkstra(adjacency, arrival_pub, agent_index, target)
+        path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
         #log_info("Going to point: " + str(coordinates[path[1]]))
         waypoint = coordinates[path[1]]
 
@@ -474,8 +470,9 @@ def main():
 
         if new_map:
             log_info("Updating map")
-            adjacency_final[:,np.asarray(occupied_msg.data)] = 0
-        adjacency = update_adjacency_with_neighbors(adjacency_final)
+            adjacency = np.copy(adjacency_org)
+            adjacency[:,np.asarray(occupied_msg.data)] = 0
+        adjacency_neigh = update_adjacency_with_neighbors(adjacency)
 
 
 if __name__ == '__main__':

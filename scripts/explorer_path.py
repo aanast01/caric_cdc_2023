@@ -1,9 +1,8 @@
-### Explorer Path Planning Code ###
-#### Created By Kios ####
-##### 16 Nov 2023 #####
+################# Explorer Path Planning Code ################
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
 __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
 __version__ = "7.0"
+##############################################################
 
 import sys
 import rospy
@@ -16,7 +15,7 @@ from kios_solution.msg import area, norms
 from caric_mission.srv import CreatePPComTopic
 from visualization_msgs.msg import MarkerArray
 from scipy.spatial import Delaunay
-import numpy as np, pandas as pd
+import numpy as np
 import math
 import traceback
 
@@ -138,36 +137,8 @@ def euclidean_distance(p1,point):
     p2[2] = point.z
     return math.sqrt( math.pow(p1[0]-p2[0],2) + math.pow(p1[1]-p2[1],2) + math.pow(p1[2]-p2[2],2))
 
-def process_boxes(msg):
-    global debug
-    points = msg.points
-    minx = 99999
-    miny = 99999
-    minz = 99999
-    maxx = -99999
-    maxy = -99999
-    maxz = -99999
-    for point in points:
-        if minx > point.x:
-            minx = point.x
-        if maxx < point.x:
-            maxx = point.x
-
-        if miny > point.y:
-            miny = point.y
-        if maxy < point.y:
-            maxy = point.y
-
-        if minz > point.z:
-            minz = point.z
-        if maxz < point.z:
-            maxz = point.z
-
-    return [minx, maxx, miny, maxy, minz, maxz]
-
 def euclidean_distance_3d(p1,p2):
     return math.sqrt( math.pow(p1[0]-p2[0],2) + math.pow(p1[1]-p2[1],2) + math.pow(p1[2]-p2[2],2))
-
 
 def main():
     # init
@@ -186,36 +157,31 @@ def main():
         set_tag("[" + namespace.upper() + " PATH SCRIPT]: ")
 		
     rospy.init_node(namespace, anonymous=True)
-    log_info(namespace)
-
     rate = rospy.Rate(10)
 
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
-    
     rospy.Subscriber("/"+namespace+"/arrived_at_target", Bool, arrivedCallback)
-
 
     # target point publisher
     target_pub = rospy.Publisher("/"+namespace+"/command/targetPoint", Point, queue_size=1)
     # velocity publisher
     velo_pub = rospy.Publisher("/"+namespace+"/command/velocity", Float32, queue_size=1)
+    # update flag publisher
+    flag_pub = rospy.Publisher("/"+namespace+"/command/update", Bool, queue_size=1, latch=False)
+    # norm pub
+    norm_pub = rospy.Publisher("/"+namespace+"/norms", norms, queue_size=1)
 
-     # Wait for service to appear
+    # Wait for service to appear
     log_info("Waiting for ppcom")
     rospy.wait_for_service('/create_ppcom_topic')
     # Create a service proxy
     create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
     # Register the topic with ppcom router
     if namespace == 'jurong':
-        response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
+        create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
     else:
-        response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
-
-    # update flag publisher
-    flag_pub = rospy.Publisher("/"+namespace+"/command/update", Bool, queue_size=1, latch=False)
-    # norm pub
-    norm_pub = rospy.Publisher("/"+namespace+"/norms", norms, queue_size=1)
+        create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
 
     # Get Bounding Box Verticies
     bboxes = rospy.wait_for_message("/gcs/bounding_box_vertices/", PointCloud)
@@ -237,7 +203,7 @@ def main():
     zrange = range(int(area_details.minPoint.z + area_details.resolution.data/2), int(area_details.minPoint.z + area_details.size.z * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
     # Constructing the graph
     coordinates = np.asarray([(x,y,z) for x in xrange for y in yrange for z in zrange]).astype(float)
-    adjacency = constuct_adjacency(area_details, coordinates)
+    adjacency_org = constuct_adjacency(area_details, coordinates)
 
     min_x = area_details.minPoint.x + 10.0
     max_x = int(area_details.minPoint.x + area_details.size.x * area_details.resolution.data) - 10.0
@@ -253,7 +219,6 @@ def main():
 
     rospy.wait_for_message("/"+namespace+"/ground_truth/odometry", Odometry)
     init_pos = position
-
 
     if scenario != 'hangar':
         # if x dimension is longest
@@ -291,16 +256,6 @@ def main():
             
                 target_points_raffles = np.array([[max_x, mid_y, mid_z],
                                                   [max_x, mid_y, max_z]])
-                
-        # points = np.concatenate((target_points_jurong, target_points_raffles))
-
-        # adjacency = np.zeros((points.shape[0],points.shape[0]))
-        # for i in range(points.shape[0]):
-        #     for j in range(points.shape[0]):
-        #         adjacency[i,j] = euclidean_distance_3d(points[i],points[j])
-
-        # log_info("Running mTSP")
-        # waypointsMatrix = calculateCircuits([i for i in range(num_of_agents)], num_of_nodes, adjacency)
     else:
         max_y = max_y -10
         min_y = min_y-5
@@ -322,57 +277,36 @@ def main():
         elif ind==3:
             target_points_jurong = np.array([p4,p2,p1,p3])
 
-
-    
     if drone_IDs[namespace] == drone_IDs['jurong']:
-        # log_info("TSP Path length: " + str(len(waypointsMatrix[0])))
-        # if scenario != 'hangar':
-        #     target_points = waypointsMatrix[0]
-        # else:
         target_points = target_points_jurong
     else:
-        # log_info("TSP Path length: " + str(len(waypointsMatrix[1])))
-        # target_points = waypointsMatrix[1]
         target_points = target_points_raffles
 
     log_info("Waiting for adjacency build")
     rospy.wait_for_message("/"+namespace+"/adjacency_viz", MarkerArray)
     rate.sleep()
 
-    # log_info("Waiting for waypoints")
-    # filename_msg = rospy.wait_for_message("/waypoints/"+namespace, String)
+    # go to initial points for map building
+    for point in target_points:
+        target_msg = Point()
+        target_msg.x = point[0]
+        target_msg.y = point[1]
+        target_msg.z = point[2]
+        log_info("Setting target to point: " + str(point))
+        while not arrived:
+            target_pub.publish(target_msg)
+            rate.sleep()
+        arrived = False
 
-    if build_map:
-        # go to initial points for map building
-        for point in target_points:
-            target_msg = Point()
-            target_msg.x = point[0]
-            target_msg.y = point[1]
-            target_msg.z = point[2]
-            log_info("Setting target to point: " + str(point))
-            while not arrived:
-                target_pub.publish(target_msg)
-                rate.sleep()
-            arrived = False
-
-        bool_msg = Bool()
-        bool_msg.data = True
-        flag_pub.publish(bool_msg)
-        rate.sleep()
-        update_done = False
-        log_info("Waiting for map merge to complete")
-        # wait for neighbor update flag
-        if namespace == 'jurong':
-            if scenario != 'hangar':
-                while not update_done:
-                    try:
-                        flag_pub.publish(bool_msg)
-                        msg = rospy.wait_for_message("/"+namespace+"/command/update_done", Bool,1)
-                        update_done = msg.data
-                    except:
-                        pass
-                    rate.sleep()
-        else:
+    bool_msg = Bool()
+    bool_msg.data = True
+    flag_pub.publish(bool_msg)
+    rate.sleep()
+    update_done = False
+    log_info("Waiting for map merge to complete")
+    # wait for neighbor update flag
+    if namespace == 'jurong':
+        if scenario != 'hangar':
             while not update_done:
                 try:
                     flag_pub.publish(bool_msg)
@@ -381,6 +315,15 @@ def main():
                 except:
                     pass
                 rate.sleep()
+    else:
+        while not update_done:
+            try:
+                flag_pub.publish(bool_msg)
+                msg = rospy.wait_for_message("/"+namespace+"/command/update_done", Bool,1)
+                update_done = msg.data
+            except:
+                pass
+            rate.sleep()
 
     vel_msg = Float32()
     vel_msg.data = 4.0
@@ -392,12 +335,9 @@ def main():
         log_info("Waiting for map")
         occupied_indicies = rospy.wait_for_message("/"+namespace+"/adjacency/", Int16MultiArray)
         occupied_indicies = np.asarray(occupied_indicies.data)
+        adjacency = np.copy(adjacency_org)
         adjacency[:,occupied_indicies] = 0
-        # log_info("Map updated")
 
-
-        # start = time.time()
-        # arr = np.sum(adjacency, axis=0)
         log_info("Calculating Object Waypoints")
         targeted_points = np.empty((0,1))
         inspect_points = np.empty((0,1))
@@ -406,33 +346,26 @@ def main():
                     if check_point_inside_cuboid(bbox_points[box_i], coordinates[index]):
                         targeted_points = np.append(targeted_points, index)
                         break
-        # duration = time.time() - start
-        # log_info("Find Target Voxels Time: " +  str(duration) + "s")
+        
         log_info("Calculating Object Neighbors")
-        # start = time.time()
         targeted_points = targeted_points.astype(int)
         
         all_norms = np.empty((0,3))
         for target_point in targeted_points:
-            # target_point = int(target_point)
             points = np.where(adjacency[target_point]>0)[0]
             inspect_points = np.append(inspect_points, points)
             for point in points:            
                 norm = coordinates[point] - coordinates[target_point]
                 norm /= np.linalg.norm(norm)
                 all_norms = np.append(all_norms, [norm], axis=0)
-        # duration = time.time() - start
-        # log_info("Calculate Norms Time: " +  str(duration) + "s")
 
         log_info("Running unique")
         inspect_points, ind = np.unique(inspect_points,axis=0, return_index=True)
         all_norms = all_norms[ind]
         inspect_points = inspect_points.astype(int)
 
-        # np.savetxt("./"+namespace+"_newPoints.csv", coordinates[inspect_points], delimiter=',')
 
         log_info("Constructing norms message")
-        # start = time.time()
         norm_msg = norms()
         for i, point in enumerate(inspect_points):
             facet_mid = Point()
@@ -445,8 +378,6 @@ def main():
             norm_point.y = all_norms[i,1]
             norm_point.z = all_norms[i,2]
             norm_msg.normals.append(norm_point)
-        # duration = time.time() - start
-        # log_info("Build Norms Message Time: " +  str(duration) + "s")
 
         norm_pub.publish(norm_msg)
 
@@ -498,11 +429,10 @@ def main():
 
         if count < 2.0:
             vel_msg = Float32()
-            vel_msg.data = 3.0 - count
+            vel_msg.data = 4.0 - count
             velo_pub.publish(vel_msg)
         count += 1
     
-
     # Return to Home (ensure LOS with GCS)
     log_info("Setting target to initial point: " + str(init_pos))
     while not arrived:
@@ -510,7 +440,6 @@ def main():
         rate.sleep()
     arrived = False
 
-    
     while not rospy.is_shutdown():
         log_info("Finished")
         flag_pub.publish(bool_msg)
