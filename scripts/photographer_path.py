@@ -206,68 +206,67 @@ def main():
     # # Generate and go to TSP points
     # log_info("Loading waypoints")
     # cleared_inspect_points = np.loadtxt(filename_msg.data, delimiter=",")
-    log_info("Waiting for map from explorers")
-    occupied_indicies = Int16MultiArray()
-    explorer_name = "jurong"
-    while len(occupied_indicies.data) == 0:
-        try:
-            occupied_indicies = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray,1)
-            log_info("Receivied map from Jurong")
-            explorer_name = "jurong"
-        except rospy.exceptions.ROSException as e:
-            try:
-                occupied_indicies = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray,1)
-                log_info("Receivied map from Raffles")
-                explorer_name = "raffles"
-            except rospy.exceptions.ROSException as e:
-                pass
-                # log_info("Waiting for map from explorers")
-        rate.sleep() 
-    log_info("Loading map")
-    valid_dist_indices =  np.asarray(occupied_indicies.data)
-    log_info("Calculating waypoints")
-    targeted_points = np.empty((0,1))
-    inspect_points = np.empty((0,1))
-    for index in valid_dist_indices:
-            for box_i in range(0,int(len(bboxes.points)/8)):
-                if check_point_inside_cuboid(bbox_points[box_i], coordinates[index]):
-                    targeted_points = np.append(targeted_points, index)
-                    break
-    
-    targeted_points = targeted_points.astype(int)
-    all_norms = np.empty((0,3))
-    for target_point in targeted_points:
-        # target_point = int(target_point)
-        points = np.where(adjacency[target_point]>0)[0]
-        inspect_points = np.append(inspect_points, points)
-        for point in points:
-            norm = coordinates[point] - coordinates[target_point]
-            norm /= np.linalg.norm(norm)
-            all_norms = np.append(all_norms, [norm], axis=0)
-        
-    log_info("Running unique")
-    inspect_points, ind = np.unique(inspect_points,axis=0, return_index=True)
-    all_norms = all_norms[ind]
-    inspect_points = inspect_points.astype(int)
-    
-    norm_msg = norms()
-    for i, point in enumerate(inspect_points):
-        facet_mid = Point()
-        facet_mid.x = coordinates[point,0]
-        facet_mid.y = coordinates[point,1]
-        facet_mid.z = coordinates[point,2]
-        norm_msg.facet_mids.append(facet_mid)
-        norm_point = Point()
-        norm_point.x = all_norms[i,0]
-        norm_point.y = all_norms[i,1]
-        norm_point.z = all_norms[i,2]
-        norm_msg.normals.append(norm_point)
-
-    norm_pub.publish(norm_msg)
-
-
     count = 0
     while repeat:
+        log_info("Waiting for map from explorers")
+        occupied_indicies = Int16MultiArray()
+        explorer_name = "jurong"
+        while len(occupied_indicies.data) == 0:
+            try:
+                occupied_indicies = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray,1)
+                log_info("Receivied map from Jurong")
+                explorer_name = "jurong"
+            except rospy.exceptions.ROSException as e:
+                try:
+                    occupied_indicies = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray,1)
+                    log_info("Receivied map from Raffles")
+                    explorer_name = "raffles"
+                except rospy.exceptions.ROSException as e:
+                    pass
+                    # log_info("Waiting for map from explorers")
+            rate.sleep() 
+        log_info("Loading map")
+        valid_dist_indices =  np.asarray(occupied_indicies.data)
+        log_info("Calculating waypoints")
+        targeted_points = np.empty((0,1))
+        inspect_points = np.empty((0,1))
+        for index in valid_dist_indices:
+                for box_i in range(0,int(len(bboxes.points)/8)):
+                    if check_point_inside_cuboid(bbox_points[box_i], coordinates[index]):
+                        targeted_points = np.append(targeted_points, index)
+                        break
+        
+        targeted_points = targeted_points.astype(int)
+        all_norms = np.empty((0,3))
+        for target_point in targeted_points:
+            # target_point = int(target_point)
+            points = np.where(adjacency[target_point]>0)[0]
+            inspect_points = np.append(inspect_points, points)
+            for point in points:
+                norm = coordinates[point] - coordinates[target_point]
+                norm /= np.linalg.norm(norm)
+                all_norms = np.append(all_norms, [norm], axis=0)
+            
+        log_info("Running unique")
+        inspect_points, ind = np.unique(inspect_points,axis=0, return_index=True)
+        all_norms = all_norms[ind]
+        inspect_points = inspect_points.astype(int)
+        
+        norm_msg = norms()
+        for i, point in enumerate(inspect_points):
+            facet_mid = Point()
+            facet_mid.x = coordinates[point,0]
+            facet_mid.y = coordinates[point,1]
+            facet_mid.z = coordinates[point,2]
+            norm_msg.facet_mids.append(facet_mid)
+            norm_point = Point()
+            norm_point.x = all_norms[i,0]
+            norm_point.y = all_norms[i,1]
+            norm_point.z = all_norms[i,2]
+            norm_msg.normals.append(norm_point)
+
+        norm_pub.publish(norm_msg)
+    
         neighbors = rospy.wait_for_message("/"+namespace+"/nbr_odom_cloud", PointCloud2)
         uav_positions = np.empty((0,3))
         uav_indices = np.array([])
@@ -302,7 +301,7 @@ def main():
             point.x = points[waypoint,0]
             point.y = points[waypoint,1]
             point.z = points[waypoint,2]
-            log_info("Setting target to point: " + str(points[waypoint]))
+            # log_info("Setting target to point: " + str(points[waypoint]))
             while not arrived:
                 target_pub.publish(point)
                 rate.sleep()
@@ -310,7 +309,7 @@ def main():
 
         if count < 2.0:
             vel_msg = Float32()
-            vel_msg.data = 2.5 - count
+            vel_msg.data = 3.0 - count
             velo_pub.publish(vel_msg)
         count += 0.5
     

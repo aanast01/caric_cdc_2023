@@ -215,7 +215,7 @@ def update_adjacency(adjacency, coordinates, obstacle_coordinates):
     clear_agent_box(6, namespace)
     # Add octomap voxel centers as obstacles in graph
     inds = np.empty((0))
-    for _, obstacle in obstacle_coordinates:
+    for obstacle in obstacle_coordinates:
         index = closest_node_index_1((obstacle[0], obstacle[1], obstacle[2]), coordinates)
         inds = np.append(inds, [index], axis=0)
 
@@ -300,7 +300,7 @@ def update_from_neighbor(coordinates):
         flag_pub2.publish(bool_msg)
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
         flag_pub2.publish(bool_msg)
-        occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
+        occupancy_coords = sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z'])
         adjacency_final, _ = update_adjacency(adjacency, coordinates, occupancy_coords)
         flag_pub2.publish(bool_msg)
         mutex.release()
@@ -312,7 +312,7 @@ def update_from_neighbor(coordinates):
         mutex.acquire()
         log_info("Final map update")
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
-        occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
+        occupancy_coords = sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z'])
         adjacency_final, _ = update_adjacency(adjacency, coordinates, occupancy_coords)
         mutex.release()
         log_info("Final map update DONE")
@@ -321,16 +321,16 @@ def update_from_neighbor(coordinates):
     # np.savetxt(filename, adjacency_final, delimiter=",")
 
     arr = np.sum(adjacency_final, axis=0)
-    obstacle_indicies = np.where(arr == 0)[0].astype(int)
-
     occupied_msg = Int16MultiArray()
-    for ind in obstacle_indicies:
-        occupied_msg.data.append(ind)
+    occupied_msg.data = np.where(arr == 0)[0].astype(int)
 
     while not rospy.is_shutdown():
         flag_pub.publish(bool_msg)
         flag_pub2.publish(bool_msg)
         adj_pub.publish(occupied_msg)
+        arr = np.sum(adjacency, axis=0)
+        occupied_msg = Int16MultiArray()
+        occupied_msg.data = np.where(arr == 0)[0].astype(int)
         publish_graph_viz(coordinates, adjacency)
         rate.sleep
 
@@ -441,6 +441,31 @@ def go_to_point():
 
             cmdPub.publish(trajset_msg)
         rate.sleep()
+
+def publish_text_viz(msg):
+    viz_pub = rospy.Publisher("/"+namespace+"/text_viz", Marker, queue_size=1)
+    marker = Marker()
+    marker.header.frame_id = "world"
+    marker.type = marker.TEXT_VIEW_FACING
+    marker.text = namespace + ": " + msg
+    marker.action = marker.ADD
+    marker.scale.x = 5.0
+    marker.scale.y = 5.0
+    marker.scale.z = 5.0
+    marker.color.a = 1.0
+    marker.color.r = 0.0
+    if namespace == "jurong":
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+    else:
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+    marker.pose.orientation.w = 1.0
+    marker.pose.position.x = 0.0
+    marker.pose.position.y = -50.0
+    marker.pose.position.z = 0.0
+
+    viz_pub.publish(marker)
 
 def publish_graph_viz(coords, adj):
     global waypoint, namespace, viz_pub
@@ -592,7 +617,7 @@ def main():
     log_info("Waiting for octomap")
     occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
     log_info("translating octomap")
-    occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
+    occupancy_coords = sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z'])
     log_info("calling adjacency update")
     adjacency, adjacency_neigh = update_adjacency(adjacency_org, coordinates, occupancy_coords)
     log_info("publishing adjacency")
@@ -615,7 +640,7 @@ def main():
     update_from_neighbor_thread = threading.Thread(target=update_from_neighbor, args=(coordinates,))
     update_from_neighbor_thread.start()
 
-
+    octomap_length = 0
     while not rospy.is_shutdown():
         agent_index = closest_node_index_1((odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z),coordinates)
         path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
@@ -624,29 +649,33 @@ def main():
         waypoint = coordinates[path[1]]
 
 
-        occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
+        occupancy_coords_msg = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
         # occ_pub.publish(occupancy_coords)
-        occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
-
+        occupancy_coords = sensor_msgs.point_cloud2.read_points(occupancy_coords_msg, skip_nans=True, field_names=['x','y','z'])
+        
 
         if update:
             # log_info("Updating map")
             mutex.acquire()
             adjacency, adjacency_neigh = update_adjacency(adjacency_org,coordinates, occupancy_coords)
             mutex.release()
-        else:
-            mutex.acquire()
-            # adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
-            adjacency, adjacency_neigh = update_adjacency(adjacency_final,coordinates, occupancy_coords)
-            mutex.release()
-            rate.sleep()
-        arr = np.sum(adjacency, axis=0)
-        obstacle_indicies = np.where(arr == 0)[0].astype(int)
-
-        occupied_msg = Int16MultiArray()
-        for ind in obstacle_indicies:
-            occupied_msg.data.append(ind)
-        occ_pub.publish(occupied_msg)
+            arr = np.sum(adjacency, axis=0)
+            # obstacle_indicies = np.where(arr == 0)[0].astype(int)
+            occupied_msg = Int16MultiArray()
+            occupied_msg.data = np.where(arr == 0)[0].astype(int)
+            # for ind in obstacle_indicies:
+            #     occupied_msg.data.append(ind)
+            occ_pub.publish(occupied_msg)
+        else:            
+            if abs(octomap_length - occupancy_coords_msg.width) > 20:
+                mutex.acquire()
+                log_info("Updating Map")
+                publish_text_viz("Map Updated")
+                octomap_length = occupancy_coords_msg.width
+                adjacency, adjacency_neigh = update_adjacency(adjacency_final,coordinates, occupancy_coords)
+                # adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
+                mutex.release()
+            publish_text_viz("")
         
         
         

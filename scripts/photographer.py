@@ -24,7 +24,7 @@ import threading
 import traceback
 
 
-maxVel = 2.5
+maxVel = 3.0
 debug = False
 TAG = ""
 odom = Odometry()
@@ -461,12 +461,12 @@ def main():
 
         new_map = False
         try:
-            occupied_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray, 0.5)
+            occupied_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray, 0.1)
             log_info("Receivied new map from Jurong")
             new_map = True
         except rospy.exceptions.ROSException as e:
             try:
-                occupied_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray, 0.5)
+                occupied_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray, 0.1)
                 log_info("Receivied new map from Raffles")
                 new_map = True
             except rospy.exceptions.ROSException as e:
@@ -474,8 +474,7 @@ def main():
 
         if new_map:
             log_info("Updating map")
-            occupied_indicies = np.asarray(occupied_msg.data)
-            adjacency_final[:,occupied_indicies] = 0
+            adjacency_final[:,np.asarray(occupied_msg.data)] = 0
         adjacency = update_adjacency_with_neighbors(adjacency_final)
 
 

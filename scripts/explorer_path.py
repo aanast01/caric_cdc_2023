@@ -168,6 +168,7 @@ def process_boxes(msg):
 def euclidean_distance_3d(p1,p2):
     return math.sqrt( math.pow(p1[0]-p2[0],2) + math.pow(p1[1]-p2[1],2) + math.pow(p1[2]-p2[2],2))
 
+
 def main():
     # init
     global grid_resolution, namespace, debug, odom, position, arrived, repeat
@@ -382,73 +383,73 @@ def main():
                 rate.sleep()
 
     vel_msg = Float32()
-    vel_msg.data = 3.0
+    vel_msg.data = 4.0
     velo_pub.publish(vel_msg)
 
-
-    # Generate and go to TSP points
-    log_info("Waiting for map")    
-    occupied_indicies = rospy.wait_for_message("/"+namespace+"/adjacency/", Int16MultiArray)
-    occupied_indicies = np.asarray(occupied_indicies.data)
-    adjacency[:,occupied_indicies] = 0
-    # log_info("Map updated")
-
-
-    # start = time.time()
-    # arr = np.sum(adjacency, axis=0)
-    log_info("Calculating Object Waypoints")
-    targeted_points = np.empty((0,1))
-    inspect_points = np.empty((0,1))
-    for index in occupied_indicies:
-            for box_i in range(0,int(len(bboxes.points)/8)):
-                if check_point_inside_cuboid(bbox_points[box_i], coordinates[index]):
-                    targeted_points = np.append(targeted_points, index)
-                    break
-    # duration = time.time() - start
-    # log_info("Find Target Voxels Time: " +  str(duration) + "s")
-    log_info("Calculating Object Neighbors")
-    # start = time.time()
-    targeted_points = targeted_points.astype(int)
-    
-    all_norms = np.empty((0,3))
-    for target_point in targeted_points:
-        # target_point = int(target_point)
-        points = np.where(adjacency[target_point]>0)[0]
-        inspect_points = np.append(inspect_points, points)
-        for point in points:            
-            norm = coordinates[point] - coordinates[target_point]
-            norm /= np.linalg.norm(norm)
-            all_norms = np.append(all_norms, [norm], axis=0)
-    # duration = time.time() - start
-    # log_info("Calculate Norms Time: " +  str(duration) + "s")
-
-    log_info("Running unique")
-    inspect_points, ind = np.unique(inspect_points,axis=0, return_index=True)
-    all_norms = all_norms[ind]
-    inspect_points = inspect_points.astype(int)
-
-    # np.savetxt("./"+namespace+"_newPoints.csv", coordinates[inspect_points], delimiter=',')
-
-    log_info("Constructing norms message")
-    # start = time.time()
-    norm_msg = norms()
-    for i, point in enumerate(inspect_points):
-        facet_mid = Point()
-        facet_mid.x = coordinates[point,0]
-        facet_mid.y = coordinates[point,1]
-        facet_mid.z = coordinates[point,2]
-        norm_msg.facet_mids.append(facet_mid)
-        norm_point = Point()
-        norm_point.x = all_norms[i,0]
-        norm_point.y = all_norms[i,1]
-        norm_point.z = all_norms[i,2]
-        norm_msg.normals.append(norm_point)
-    # duration = time.time() - start
-    # log_info("Build Norms Message Time: " +  str(duration) + "s")
-
-    norm_pub.publish(norm_msg)
     count = 0
     while repeat:
+        # Generate and go to TSP points
+        log_info("Waiting for map")
+        occupied_indicies = rospy.wait_for_message("/"+namespace+"/adjacency/", Int16MultiArray)
+        occupied_indicies = np.asarray(occupied_indicies.data)
+        adjacency[:,occupied_indicies] = 0
+        # log_info("Map updated")
+
+
+        # start = time.time()
+        # arr = np.sum(adjacency, axis=0)
+        log_info("Calculating Object Waypoints")
+        targeted_points = np.empty((0,1))
+        inspect_points = np.empty((0,1))
+        for index in occupied_indicies:
+                for box_i in range(0,int(len(bboxes.points)/8)):
+                    if check_point_inside_cuboid(bbox_points[box_i], coordinates[index]):
+                        targeted_points = np.append(targeted_points, index)
+                        break
+        # duration = time.time() - start
+        # log_info("Find Target Voxels Time: " +  str(duration) + "s")
+        log_info("Calculating Object Neighbors")
+        # start = time.time()
+        targeted_points = targeted_points.astype(int)
+        
+        all_norms = np.empty((0,3))
+        for target_point in targeted_points:
+            # target_point = int(target_point)
+            points = np.where(adjacency[target_point]>0)[0]
+            inspect_points = np.append(inspect_points, points)
+            for point in points:            
+                norm = coordinates[point] - coordinates[target_point]
+                norm /= np.linalg.norm(norm)
+                all_norms = np.append(all_norms, [norm], axis=0)
+        # duration = time.time() - start
+        # log_info("Calculate Norms Time: " +  str(duration) + "s")
+
+        log_info("Running unique")
+        inspect_points, ind = np.unique(inspect_points,axis=0, return_index=True)
+        all_norms = all_norms[ind]
+        inspect_points = inspect_points.astype(int)
+
+        # np.savetxt("./"+namespace+"_newPoints.csv", coordinates[inspect_points], delimiter=',')
+
+        log_info("Constructing norms message")
+        # start = time.time()
+        norm_msg = norms()
+        for i, point in enumerate(inspect_points):
+            facet_mid = Point()
+            facet_mid.x = coordinates[point,0]
+            facet_mid.y = coordinates[point,1]
+            facet_mid.z = coordinates[point,2]
+            norm_msg.facet_mids.append(facet_mid)
+            norm_point = Point()
+            norm_point.x = all_norms[i,0]
+            norm_point.y = all_norms[i,1]
+            norm_point.z = all_norms[i,2]
+            norm_msg.normals.append(norm_point)
+        # duration = time.time() - start
+        # log_info("Build Norms Message Time: " +  str(duration) + "s")
+
+        norm_pub.publish(norm_msg)
+
         log_info("Constructing TSP matrix")
         neighbors = PointCloud2()
         try:
@@ -489,7 +490,7 @@ def main():
             point.x = points[waypoint,0]
             point.y = points[waypoint,1]
             point.z = points[waypoint,2]
-            log_info("Setting target to point: " + str(points[waypoint]))
+            # log_info("Setting target to point: " + str(points[waypoint]))
             while not arrived:
                 target_pub.publish(point)
                 rate.sleep()
