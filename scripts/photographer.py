@@ -7,7 +7,7 @@ __version__ = "7.0"
 
 import sys
 import rospy
-from std_msgs.msg import Header, Float32, Bool, String
+from std_msgs.msg import Header, Float32, Bool, Int16MultiArray
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs.point_cloud2
@@ -21,7 +21,7 @@ import math
 import numpy as np
 import heapq
 import threading
-import time
+import traceback
 
 
 maxVel = 2.5
@@ -140,6 +140,42 @@ def neighCallback(msg):
     global neighbors
     neighbors = msg
 
+def closest_node_index_1(node, nodes):
+    distances = np.linalg.norm(nodes - node, axis=1)
+    return np.argmin(distances)
+
+def constuct_adjacency(area_details, coordinates):
+    global offsets_cross
+    num_of_nodes = len(coordinates)
+    adjacency_1 = np.zeros((num_of_nodes,num_of_nodes))
+    log_info("Starting Adjacency calculation. Please wait... ")
+    for _,coord in enumerate(coordinates):
+        for _, offset in enumerate(offsets_cross):
+            neighbor_x = coord[0]+(offset[0] * area_details.resolution.data)
+            neighbor_y = coord[1]+(offset[1] * area_details.resolution.data)
+            neighbor_z = coord[2]+(offset[2] * area_details.resolution.data)
+           
+            
+            gone_too_far_x = (neighbor_x < area_details.minPoint.x) or (neighbor_x > (area_details.minPoint.x + area_details.size.x*area_details.resolution.data))
+            gone_too_far_y = (neighbor_y < area_details.minPoint.y) or (neighbor_y > (area_details.minPoint.y + area_details.size.y*area_details.resolution.data))
+            gone_too_far_z = (neighbor_z < area_details.minPoint.z) or (neighbor_z > (area_details.minPoint.z + area_details.size.z*area_details.resolution.data))
+            if gone_too_far_x or gone_too_far_y or gone_too_far_z:
+                continue
+            
+            
+            neighbor_index = closest_node_index_1((neighbor_x, neighbor_y, neighbor_z),coordinates)
+            my_index = closest_node_index_1((coord[0], coord[1], coord[2]),coordinates)
+            
+            
+            # cost = euclidean_distance_3d(coord, coordinates[neighbor_index])
+            try:
+                adjacency_1[my_index,neighbor_index] = 1 #cost
+                adjacency_1[neighbor_index,my_index] = 1 #cost
+            except:
+                pass
+
+    return adjacency_1
+
 def update_adjacency_with_neighbors(adjacency_og):
     global neighbors, grid_resolution, coordinates, area_details
     adjacency_temp = np.copy(adjacency_og)
@@ -163,7 +199,7 @@ def update_adjacency_with_neighbors(adjacency_og):
                 adjacency_temp[:,neighbor_index]=0
 
     arr = np.sum(adjacency_temp, axis=1)
-    isolated_indicies = np.where(arr <= grid_resolution*2)[0]
+    isolated_indicies = np.where(arr <= 2)[0]
     adjacency_temp[:,isolated_indicies] = 0
 
     return adjacency_temp
@@ -240,22 +276,16 @@ def go_to_point():
             cmdPub.publish(trajset_msg)
         rate.sleep()
 
-def closest_node_index_1(node, nodes):
-    nodes = np.asarray(nodes)
-    deltas = nodes - node
-    dist_2 = np.einsum('ij,ij->i', deltas, deltas)
-
-    return np.argmin(dist_2)
-
 def closest_node_index(node, nodes):
     global adjacency
     arr = np.sum(adjacency, axis=0)
     valid_dist_indices = np.nonzero(arr)[0]
-    nodes = np.asarray(nodes)
-    deltas = nodes[valid_dist_indices] - node
-    dist_2 = np.einsum('ij,ij->i', deltas, deltas)
+    distances = np.linalg.norm(nodes[valid_dist_indices] - node, axis=1)
+    # nodes = np.asarray(nodes)
+    # deltas = nodes[valid_dist_indices] - node
+    # dist_2 = np.einsum('ij,ij->i', deltas, deltas)
     
-    return valid_dist_indices[np.argmin(dist_2)]
+    return valid_dist_indices[np.argmin(distances)]#valid_dist_indices[np.argmin(dist_2)]
 
 def publish_graph_viz():
     global waypoint, namespace, viz_pub, coordinates, adjacency
@@ -374,34 +404,43 @@ def main():
     # occupied coordinates publisher
     arrival_pub = rospy.Publisher('/'+namespace+'/arrived_at_target', Bool, queue_size=1)
 
+    # Get inspection area details
+    log_info("Waiting for area details")
     area_details = rospy.wait_for_message("/world_coords/"+namespace, area)
+    log_info("Construct Adjacency")    
+    xrange = range(int(area_details.minPoint.x + area_details.resolution.data/2), int(area_details.minPoint.x + area_details.size.x * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
+    yrange = range(int(area_details.minPoint.y + area_details.resolution.data/2), int(area_details.minPoint.y + area_details.size.y * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
+    zrange = range(int(area_details.minPoint.z + area_details.resolution.data/2), int(area_details.minPoint.z + area_details.size.z * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
+    # Constructing the graph
+    coordinates = np.asarray([(x,y,z) for x in xrange for y in yrange for z in zrange])
+    adjacency_final = constuct_adjacency(area_details, coordinates)
 
     # create thread
     waypoint = (-3000,-3000,-3000)
     command_thread = threading.Thread(target=go_to_point)
     command_thread.start()
 
-    filename_msg = String()
+    occupied_msg = Int16MultiArray()
     log_info("Waiting for map from explorers")
     explorer_name = "jurong"
-    while len(filename_msg.data) == 0:
+    while len(occupied_msg.data) == 0:
         try:
-            filename_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, String, 1)
+            occupied_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray, 1)
             log_info("Receivied map from Jurong")
             explorer_name = "jurong"
         except rospy.exceptions.ROSException as e:
             try:
-                filename_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, String, 1)
+                occupied_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray, 1)
                 log_info("Receivied map from Raffles")
                 explorer_name = "raffles"
             except rospy.exceptions.ROSException as e:
                 pass
-                #log_info("Waiting for map from explorers")
+                # log_info("Waiting for map from explorers")
         rate.sleep() 
     
     log_info("Loading map")
-    adjacency_final = np.loadtxt(filename_msg.data, delimiter=",")
-    coordinates = np.loadtxt("./"+explorer_name+"_coordinates.csv", delimiter=",")
+    occupied_indicies = np.asarray(occupied_msg.data)
+    adjacency_final[:,occupied_indicies] = 0
     adjacency = update_adjacency_with_neighbors(adjacency_final)
     publish_graph_viz()
 
@@ -431,6 +470,6 @@ if __name__ == '__main__':
         print("terminating...")
         command_thread.terminate()
     except Exception as e:
-        print(e)
+        traceback.print_exc()
     finally:
         exit()

@@ -7,15 +7,17 @@ __version__ = "7.0"
 
 import sys
 import rospy
-from std_msgs.msg import String, Bool, Float32
+from std_msgs.msg import Bool, Float32, Int16MultiArray
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point
 from sensor_msgs.msg import PointCloud2, PointCloud
-from kios_solution.msg import norms
+from kios_solution.msg import norms, area
 import sensor_msgs.point_cloud2
 from scipy.spatial import Delaunay
 import numpy as np, pandas as pd
 import math
+import traceback
+
 
 repeat = True
 debug = False
@@ -30,6 +32,46 @@ grid_resolution = 6
 namespace = "jurong"
 arrived = False
 drone_IDs = {'gcs':0, 'jurong':1, 'raffles':2, 'sentosa':3, 'changi':4, 'nanyang':5}
+
+offsets_cross = [
+    (0,-1,0), (1,0,0), (0,1,0), (-1,0,0), (0,0,1), (0,0,-1)
+]
+
+def closest_node_index_1(node, nodes):
+    distances = np.linalg.norm(nodes - node, axis=1)
+    return np.argmin(distances)
+
+def constuct_adjacency(area_details, coordinates):
+    global offsets_cross
+    num_of_nodes = len(coordinates)
+    adjacency_1 = np.zeros((num_of_nodes,num_of_nodes))
+    log_info("Starting Adjacency calculation. Please wait... ")
+    for _,coord in enumerate(coordinates):
+        for _, offset in enumerate(offsets_cross):
+            neighbor_x = coord[0]+(offset[0] * area_details.resolution.data)
+            neighbor_y = coord[1]+(offset[1] * area_details.resolution.data)
+            neighbor_z = coord[2]+(offset[2] * area_details.resolution.data)
+           
+            
+            gone_too_far_x = (neighbor_x < area_details.minPoint.x) or (neighbor_x > (area_details.minPoint.x + area_details.size.x*area_details.resolution.data))
+            gone_too_far_y = (neighbor_y < area_details.minPoint.y) or (neighbor_y > (area_details.minPoint.y + area_details.size.y*area_details.resolution.data))
+            gone_too_far_z = (neighbor_z < area_details.minPoint.z) or (neighbor_z > (area_details.minPoint.z + area_details.size.z*area_details.resolution.data))
+            if gone_too_far_x or gone_too_far_y or gone_too_far_z:
+                continue
+            
+            
+            neighbor_index = closest_node_index_1((neighbor_x, neighbor_y, neighbor_z),coordinates)
+            my_index = closest_node_index_1((coord[0], coord[1], coord[2]),coordinates)
+            
+            
+            # cost = euclidean_distance_3d(coord, coordinates[neighbor_index])
+            try:
+                adjacency_1[my_index,neighbor_index] = 1 #cost
+                adjacency_1[neighbor_index,my_index] = 1 #cost
+            except:
+                pass
+
+    return adjacency_1
 
 def check_point_inside_cuboid(vertices, point):
     DT = Delaunay(vertices)
@@ -132,6 +174,16 @@ def main():
     # norm pub
     norm_pub = rospy.Publisher("/"+namespace+"/norms", norms, queue_size=1)
 
+    # Get inspection area details
+    log_info("Waiting for area details")
+    area_details = rospy.wait_for_message("/world_coords/"+namespace, area)
+    xrange = range(int(area_details.minPoint.x + area_details.resolution.data/2), int(area_details.minPoint.x + area_details.size.x * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
+    yrange = range(int(area_details.minPoint.y + area_details.resolution.data/2), int(area_details.minPoint.y + area_details.size.y * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
+    zrange = range(int(area_details.minPoint.z + area_details.resolution.data/2), int(area_details.minPoint.z + area_details.size.z * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
+    # Constructing the graph
+    coordinates = np.asarray([(x,y,z) for x in xrange for y in yrange for z in zrange]).astype(float)
+    adjacency = constuct_adjacency(area_details, coordinates)
+
     # Get Bounding Box Verticies
     bboxes = rospy.wait_for_message("/gcs/bounding_box_vertices/", PointCloud)
     bbox_points = np.zeros((int(len(bboxes.points)/8),8,3))
@@ -155,30 +207,24 @@ def main():
     # log_info("Loading waypoints")
     # cleared_inspect_points = np.loadtxt(filename_msg.data, delimiter=",")
     log_info("Waiting for map from explorers")
-    filename_msg = String()
+    occupied_indicies = Int16MultiArray()
     explorer_name = "jurong"
-    while len(filename_msg.data) == 0:
+    while len(occupied_indicies.data) == 0:
         try:
-            filename_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, String, 1)
+            occupied_indicies = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray,1)
             log_info("Receivied map from Jurong")
             explorer_name = "jurong"
         except rospy.exceptions.ROSException as e:
             try:
-                filename_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, String, 1)
+                occupied_indicies = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray,1)
                 log_info("Receivied map from Raffles")
                 explorer_name = "raffles"
             except rospy.exceptions.ROSException as e:
                 pass
-                #log_info("Waiting for map from explorers")
+                # log_info("Waiting for map from explorers")
         rate.sleep() 
     log_info("Loading map")
-    adjacency = np.loadtxt(filename_msg.data, delimiter=",")
-    coordinates = np.loadtxt("./"+explorer_name+"_coordinates.csv", delimiter=",")
-    # adjacency = pd.read_csv(filename_msg.data, delimiter=",").values
-    # coordinates = pd.read_csv("./"+explorer_name+"_coordinates.csv", delimiter=",").values
-    arr = np.sum(adjacency, axis=0)
-    valid_dist_indices = np.where(arr == 0)[0]
-
+    valid_dist_indices =  np.asarray(occupied_indicies.data)
     log_info("Calculating waypoints")
     targeted_points = np.empty((0,1))
     inspect_points = np.empty((0,1))
@@ -256,7 +302,7 @@ def main():
             point.x = points[waypoint,0]
             point.y = points[waypoint,1]
             point.z = points[waypoint,2]
-            log_info("Setting target to point: " + str(point))
+            log_info("Setting target to point: " + str(points[waypoint]))
             while not arrived:
                 target_pub.publish(point)
                 rate.sleep()
@@ -285,6 +331,6 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("terminating...")
     except Exception as e:
-        print(e)
+        traceback.print_exc()
     finally:
         exit()

@@ -6,7 +6,7 @@ __copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
 __version__ = "7.0"
 
 import rospy
-from std_msgs.msg import Header, Float32, Bool, String
+from std_msgs.msg import Header, Float32, Bool, Int16MultiArray, Int16
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
 import sensor_msgs.point_cloud2
@@ -23,6 +23,8 @@ import threading
 import time
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import shortest_path
+import traceback
+
 
 def sci_dijkstra(g, arrival_pub, s, t):
     if (s==t):
@@ -198,10 +200,10 @@ def constuct_adjacency(area_details, coordinates):
             my_index = closest_node_index_1((coord[0], coord[1], coord[2]),coordinates)
             
             
-            cost = euclidean_distance_3d(coord, coordinates[neighbor_index])
+            # cost = euclidean_distance_3d(coord, coordinates[neighbor_index])
             try:
-                adjacency_1[my_index,neighbor_index] = cost
-                adjacency_1[neighbor_index,my_index] = cost
+                adjacency_1[my_index,neighbor_index] = 1 #cost
+                adjacency_1[neighbor_index,my_index] = 1 #cost
             except:
                 pass
 
@@ -250,7 +252,7 @@ def update_adjacency_with_neighbors(adjacency):
 
     # mark isolated nodes as obstacles in graph
     arr = np.sum(adjacency_temp, axis=1)
-    isolated_indicies = np.where(arr <= grid_resolution*2)[0]
+    isolated_indicies = np.where(arr <= 2)[0]
     for _, index in enumerate(isolated_indicies):
         adjacency_temp[:,index] = 0
 
@@ -261,13 +263,13 @@ def update_from_neighbor(coordinates):
     log_info("waiting for update command")
     flag_pub = rospy.Publisher("/"+namespace+"/command/update_done", Bool, queue_size=1, latch=True)
     flag_pub2 = rospy.Publisher("/"+namespace+"/command/update", Bool, queue_size=1, latch=True)
-    adj_pub = rospy.Publisher("/"+namespace+"/adjacency", String, queue_size=1, latch=True)
+    adj_pub = rospy.Publisher("/"+namespace+"/adjacency", Int16MultiArray, queue_size=1, latch=True)
     bool_msg = Bool()
     bool_msg.data = True
 
     rospy.wait_for_message("/"+namespace+"/command/update", Bool)
     rate = rospy.Rate(1)
-    
+   
     if scenario != 'hangar':
         occupancy_coords = PointCloud2()
         log_info("Waiting for neighbor map")
@@ -313,14 +315,20 @@ def update_from_neighbor(coordinates):
         mutex.release()
         log_info("Final map update DONE")
 
-    filename = "./"+namespace+"_adjacency.csv"
-    np.savetxt(filename, adjacency_final, delimiter=",")
-    filename_str = String()
-    filename_str.data = filename
+    # filename = "./"+namespace+"_adjacency.csv"
+    # np.savetxt(filename, adjacency_final, delimiter=",")
+
+    arr = np.sum(adjacency_final, axis=0)
+    obstacle_indicies = np.where(arr == 0)[0].astype(int)
+
+    occupied_msg = Int16MultiArray()
+    for ind in obstacle_indicies:
+        occupied_msg.data.append(ind)
+
     while not rospy.is_shutdown():
         flag_pub.publish(bool_msg)
         flag_pub2.publish(bool_msg)
-        adj_pub.publish(filename_str)
+        adj_pub.publish(occupied_msg)
         publish_graph_viz(coordinates, adjacency_final)
         rate.sleep
 
@@ -335,11 +343,12 @@ def closest_node_index(node, nodes):
     global adjacency
     arr = np.sum(adjacency, axis=0)
     valid_dist_indices = np.nonzero(arr)[0]
-    nodes = np.asarray(nodes)
-    deltas = nodes[valid_dist_indices] - node
-    dist_2 = np.einsum('ij,ij->i', deltas, deltas)
+    distances = np.linalg.norm(nodes[valid_dist_indices] - node, axis=1)
+    # nodes = np.asarray(nodes)
+    # deltas = nodes[valid_dist_indices] - node
+    # dist_2 = np.einsum('ij,ij->i', deltas, deltas)
     
-    return valid_dist_indices[np.argmin(dist_2)]
+    return valid_dist_indices[np.argmin(distances)]#valid_dist_indices[np.argmin(dist_2)]
 
 def clear_agent_box(size, namespace):
     global odom, neighbors
@@ -548,7 +557,7 @@ def main():
     create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
     # Register the topic with ppcom router
     response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/occupancy_coords', 'sensor_msgs', 'PointCloud2')
-    response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/adjacency', 'std_msgs', 'String')
+    response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/adjacency', 'std_msgs', 'Int16MultiArray')
     # Register the topic with ppcom router
     if namespace == 'jurong':
         response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
@@ -560,7 +569,7 @@ def main():
     # Get inspection area details
     log_info("Waiting for area details")
     area_details = rospy.wait_for_message("/world_coords/"+namespace, area)
-    num_of_nodes = int(area_details.size.x * area_details.size.y * area_details.size.z)
+    # num_of_nodes = int(area_details.size.x * area_details.size.y * area_details.size.z)
 
     xrange = range(int(area_details.minPoint.x + area_details.resolution.data/2), int(area_details.minPoint.x + area_details.size.x * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
     yrange = range(int(area_details.minPoint.y + area_details.resolution.data/2), int(area_details.minPoint.y + area_details.size.y * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
@@ -609,7 +618,7 @@ def main():
         agent_index = closest_node_index_1((odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z),coordinates)
         path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
         # path = sci_dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
-        log_info("Going to point: " + str(coordinates[path[1]]))
+        # log_info("Going to point: " + str(coordinates[path[1]]))
         waypoint = coordinates[path[1]]
 
 
@@ -619,7 +628,7 @@ def main():
 
 
         if update:
-            log_info("Updating map")
+            # log_info("Updating map")
             mutex.acquire()
             adjacency, adjacency_neigh = update_adjacency(adjacency_org,coordinates, occupancy_coords)
             mutex.release()
@@ -641,9 +650,12 @@ if __name__ == '__main__':
         filename1 = "./"+namespace+"_adjacency.csv"
         filename2 = "./"+namespace+"_coordinates.csv"
         import os
-        os.remove(filename1)
+        try:
+            os.remove(filename1)
+        except:
+            pass
         os.remove(filename2)
     except Exception as e:
-        print(e)
+        traceback.print_exc()
     finally:
         exit()
