@@ -396,9 +396,8 @@ def main():
                 uav_indices = np.append(uav_indices, point[3])
 
         pos = 0
-        if(uav_positions.shape[0]!=0):
-            while uav_indices[pos] < drone_IDs[namespace]:
-                pos += 1
+        while (pos < len(uav_indices)) and (uav_indices[pos] < drone_IDs[namespace]):
+            pos += 1
         
         uav_positions = np.insert(uav_positions, pos, [position.x, position.y, position.z], axis=0)
         uav_indices = np.insert(uav_indices, pos, drone_IDs[namespace])
