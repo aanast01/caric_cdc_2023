@@ -326,7 +326,7 @@ def main():
             rate.sleep()
 
     vel_msg = Float32()
-    vel_msg.data = 4.0
+    vel_msg.data = 3.5
     velo_pub.publish(vel_msg)
 
     count = 0
@@ -429,7 +429,7 @@ def main():
 
         if count < 2.0:
             vel_msg = Float32()
-            vel_msg.data = 4.0 - count
+            vel_msg.data = 3.5 - count
             velo_pub.publish(vel_msg)
         count += 1
     

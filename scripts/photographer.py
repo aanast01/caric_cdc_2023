@@ -19,7 +19,7 @@ import heapq
 import threading
 import traceback
 
-maxVel = 4.0
+maxVel = 3.0
 debug = False
 TAG = ""
 odom = Odometry()
@@ -150,7 +150,7 @@ def constuct_adjacency(area_details, coordinates):
     adjacency_1 = np.zeros((num_of_nodes,num_of_nodes))
     log_info("Starting Adjacency calculation. Please wait... ")
     for _,coord in enumerate(coordinates):
-        for _, offset in enumerate(offsets_all):
+        for _, offset in enumerate(offsets_cross):
             neighbor_x = coord[0]+(offset[0] * area_details.resolution.data)
             neighbor_y = coord[1]+(offset[1] * area_details.resolution.data)
             neighbor_z = coord[2]+(offset[2] * area_details.resolution.data)
@@ -274,6 +274,7 @@ def go_to_point():
             trajset_msg.header = header_msg
 
             cmdPub.publish(trajset_msg)
+        
         rate.sleep()
 
 def closest_node_index(node, nodes):
@@ -473,6 +474,7 @@ def main():
             adjacency = np.copy(adjacency_org)
             adjacency[:,np.asarray(occupied_msg.data)] = 0
         adjacency_neigh = update_adjacency_with_neighbors(adjacency)
+        publish_graph_viz()
 
 
 if __name__ == '__main__':

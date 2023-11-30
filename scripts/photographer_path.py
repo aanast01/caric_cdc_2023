@@ -297,7 +297,7 @@ def main():
 
         if count < 2.0:
             vel_msg = Float32()
-            vel_msg.data = 4.0 - count
+            vel_msg.data = 3.0 - count
             velo_pub.publish(vel_msg)
         count += 1.0
     
