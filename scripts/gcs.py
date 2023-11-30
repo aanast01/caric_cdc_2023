@@ -1,9 +1,8 @@
-### GCS LOGIC CODE ###
-#### Created By Kios ####
-##### 10 Nov 2023 #####
+####################### GCS Logic Code #######################
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
-__copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
+__copyright__ = "Copyright (C) 2023 KIOS Center of Excellence"
 __version__ = "7.0"
+##############################################################
 
 import rospy
 from std_msgs.msg import String
@@ -13,150 +12,7 @@ import sensor_msgs.point_cloud2
 from nav_msgs.msg import Odometry
 from caric_mission.srv import CreatePPComTopic
 from kios_solution.msg import area, norms
-from geometry_msgs.msg import Point
-from scipy.spatial import Delaunay, ConvexHull
-import numpy as np
-import sys
-import math
-
-
-def generate_points_on_cuboid_faces(vertices, num_points_per_face=10):
-    # Convert vertices to a NumPy array for easier manipulation
-    vertices = np.array(vertices)
- 
-    # Find the convex hull of the vertices
-    hull = ConvexHull(vertices)
-    DT = Delaunay(vertices)
-    faces = hull.simplices  # Get the vertices of each face
- 
-    all_points = []
-    all_norms = []
-
-    for face in faces:
-        # Extract the vertices of the current face
-        current_face = vertices[face]
-        #Calculate face norm
-        normal = find_norm_from_face(DT, current_face)
-
-        # Calculate three edges of the face
-        edge1 = current_face[1] - current_face[0]
-        edge2 = current_face[2] - current_face[0]
-        edge3 = current_face[2] - current_face[1]
-        edges = np.array([edge1,edge2,edge3])
-        len_edge1 = np.linalg.norm(edge1)
-        len_edge2 = np.linalg.norm(edge2)
-        len_edge3 = np.linalg.norm(edge3)
-        # Find perpendicular edges
-        ind = np.where(np.array([len_edge1, len_edge2, len_edge3])==max(len_edge1, len_edge2, len_edge3))[0]
-        if ind == 0:
-            common_point = current_face[2]
-            edge1 = current_face[1] - current_face[2]
-            edge2 = current_face[0] - current_face[2]
-        elif ind == 1:
-            common_point = current_face[1]
-            edge1 = current_face[2] - current_face[1]
-            edge2 = current_face[0] - current_face[1]
-        else:
-            common_point = current_face[0]
-            edge1 = current_face[1] - current_face[0]
-            edge2 = current_face[2] - current_face[0]
-
-        # Generate points on the current face using parametric equations
-        grid_res = rospy.get_param('grid_resolution')
-        num_points_x = max(3,int(round(np.linalg.norm(edge1))/grid_res))
-        num_points_y = max(3,int(round(np.linalg.norm(edge2))/grid_res))
-        u = np.linspace(0, 1, num_points_x)
-        v = np.linspace(0, 1, num_points_y)
-        u, v = np.meshgrid(u, v)
-
-
-        face_points = []
-        face_norms = []
-        for i in range(1, num_points_y-1):
-            for j in range(1, num_points_x-1):
-                # Calculate the point on the face using parametric equations
-                try:
-                    point_on_face = common_point + u[i][j] * edge1 + v[i][j] * edge2
-                    face_points.append(point_on_face)
-                    face_norms.append(normal)
-                except Exception as e:
-                    print(i, " ", j)
-                    exit()
-        
-
-        all_points.extend(face_points)
-        all_norms.extend(face_norms)
-
-    all_points = np.array(all_points)
-    all_points, ind = np.unique(all_points,axis=0, return_index=True)
-    all_norms = np.array(all_norms)
-    all_norms = all_norms[ind]
- 
-    return all_points, all_norms
-
-def find_norm_from_face(DT, current_face):
-
-    # Calculate face normals manually
-    A, B, C = current_face
-    AB = B - A
-    AC = C - A
-    center = np.mean(current_face, axis=0)
-    normal = np.cross(AB, AC)
-    normal /= np.linalg.norm(normal)
-    if DT.find_simplex(center+normal) >= 0:
-        normal = (-normal)
-    else:
-        normal = normal
-
-    return normal
-
-def check_point_inside_cuboid(vertices, point):
-    # Extract x, y, z coordinates of the vertices
-    x_coords, y_coords, z_coords = zip(*vertices)
-    # Determine the boundaries
-    min_x = min(x_coords)+5
-    max_x = max(x_coords)-5
-    min_y = min(y_coords)+5
-    max_y = max(y_coords)-5
-    min_z = min(z_coords)+5
-    max_z = max(z_coords)-5
-    # Check if the point is inside the cuboid
-    x_p, y_p, z_p = point
-    if min_x < x_p < max_x and min_y < y_p < max_y and min_z < z_p < max_z:
-        return True
-    else:
-        return False
-
-def calculateCircuits(positions, num_of_nodes, TravellingCost):
-    UAVs = len(positions)
-
-    # Initialization of Set S matrices and CircuitX, CircuitY.
-    Set_S_source = [[] for i in range(0, UAVs)]
-    Set_S_destination = [[] for i in range(0, UAVs)]
-    Set_S_cost = [[] for i in range(0, UAVs)]
-    listV1 = [0 for i in range(0, num_of_nodes)]
-    for z in range(0, UAVs):
-        listV1[positions[z]] = 1
-
-    while (sum(listV1) < num_of_nodes):
-        for i in range(0, UAVs):
-            node = 0
-            flag = False
-            futureCost = sys.maxsize
-            for j in range(0, num_of_nodes):
-                if (listV1[j] == 0):
-                    if (futureCost >= TravellingCost[positions[i]][j]):
-                        futureCost = TravellingCost[positions[i]][j]
-                        node = j
-                        flag = True
-            if flag:
-                listV1[node] = 1
-                Set_S_source[i].append(positions[i])
-                Set_S_destination[i].append(node)
-                Set_S_cost[i].append(futureCost)
-
-    
-    return Set_S_destination
+import traceback
 
 debug = False
 TAG = ""
@@ -260,56 +116,15 @@ def find_world_min_max(msg, min_max):
             maxz += grid_res-(abs(minz) + abs(maxz))%grid_res
     return [minx, maxx, miny, maxy, minz, maxz]
 
-def find_norms(vertices):
-    # Create Delaunay triangulation
-    DT = Delaunay(vertices)
-    
-    # Extract free boundary
-    edges = DT.convex_hull  # Convex hull represents the free boundary in Delaunay triangulation
-
-    # Calculate incenter of triangles
-    triangles = vertices[edges]
-
-    P = np.mean(triangles, axis=1)
-    
-    # Calculate face normals manually
-    normals = []
-    for i, triangle in enumerate(triangles):
-        A, B, C = triangle
-        AB = B - A
-        AC = C - A
-        normal = np.cross(AB, AC)
-        normal /= np.linalg.norm(normal)
-        if DT.find_simplex(P[i]+normal) >= 0:
-            normals.append(-normal)
-        else:
-            normals.append(normal)
-
-    F = np.array(normals)
- 
-    # Now P contains the triangle incenters and F contains the face normals
-
-    if scenario != 'hangar':
-        remove_indicies = np.where(P[:,2] <= 5)[0]
-        P = np.delete(P,remove_indicies, axis=0)
-        F = np.delete(F,remove_indicies, axis=0)
-
-
-    return [P, F]
-
-def euclidean_distance_3d(p1,p2):
-    return math.sqrt( math.pow(p1[0]-p2[0],2) + math.pow(p1[1]-p2[1],2) + math.pow(p1[2]-p2[2],2))
-
 def main():
     global debug, scenario
     # init
     try:
-        namespace = rospy.get_param('namespace') # node_name/argsname
+        namespace = rospy.get_param('namespace')
         scenario = rospy.get_param('scenario')
         debug = rospy.get_param('debug')
         grid_res = rospy.get_param('grid_resolution')
         set_tag("[" + namespace.upper() + " SCRIPT]: ")
-        #rospy.loginfo(TAG + namespace)
     except Exception as e:
         print(e)
         namespace = "gcs"
@@ -344,9 +159,9 @@ def main():
     # Create a service proxy
     create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
     # Register the topic with ppcom router
-    response = create_ppcom_topic('gcs', ['all'], '/world_coords', 'kios_solution', 'area')
-    response = create_ppcom_topic('gcs', ['all'], '/norms', 'kios_solution', 'norms')
-    response = create_ppcom_topic('gcs', ['all'], '/waypoints', 'std_msgs', 'String')
+    create_ppcom_topic('gcs', ['all'], '/world_coords', 'kios_solution', 'area')
+    create_ppcom_topic('gcs', ['all'], '/norms', 'kios_solution', 'norms')
+    create_ppcom_topic('gcs', ['all'], '/waypoints', 'std_msgs', 'String')
     # Create the publisher
     # coords pub
     msg_pub = rospy.Publisher('/world_coords', area, queue_size=1)
@@ -378,79 +193,18 @@ def main():
     area_msg.size.y = size_y
     area_msg.size.z = size_z
     area_msg.resolution.data = grid_res
-    msg_pub.publish(area_msg)
-
-    # find inspection target points
-    log_info("Calculating waypoints based on bounding boxes")
-
-    bbox_points = np.zeros((int(len(bboxes.points)/8),8,3))
-    counter = 0
-    for i in range(0,int(len(bboxes.points)/8)):
-        for j in range(8):
-            bbox_points[i,j,0] = bboxes.points[counter].x
-            bbox_points[i,j,1] = bboxes.points[counter].y
-            bbox_points[i,j,2] = bboxes.points[counter].z
-            counter += 1
-
-    #create interest points
-
-    all_points = np.empty((0,3))
-    all_norms = np.empty((0,3))
-    for box_i in range(0,int(len(bboxes.points)/8)):
-        all_box_points,all_box_norms = generate_points_on_cuboid_faces(bbox_points[box_i],8)
-
-        all_points = np.append(all_points, all_box_points, axis=0)
-        all_norms = np.append(all_norms, all_box_norms, axis=0)
-
-    delete_index = np.empty((0,1))
-    for box_i in range(0,int(len(bboxes.points)/8)):
-        DT = Delaunay(bbox_points[box_i])
-        for i in range(all_points.shape[0]):
-            if DT.find_simplex(all_points[i] + all_norms[i]) >= 0:
-                delete_index = np.append(delete_index, [i])
-        delete_index = delete_index.astype(int)
-    if delete_index.size > 0:
-        all_points = np.delete(all_points, delete_index, axis=0)
-        all_norms = np.delete(all_norms, delete_index, axis=0)
-
-    log_info("Constructing norms message")
-    norm_msg = norms()
-    for i in range(all_points.shape[0]):
-        facet_mid = Point()
-        facet_mid.x = all_points[i,0]
-        facet_mid.y = all_points[i,1]
-        facet_mid.z = all_points[i,2]
-        norm_msg.facet_mids.append(facet_mid)
-        norm_point = Point()
-        norm_point.x = all_norms[i,0]
-        norm_point.y = all_norms[i,1]
-        norm_point.z = all_norms[i,2]
-        norm_msg.normals.append(norm_point)
- 
-    log_info("Sending waypoints")
- 
-    filename = "./"+namespace+"_waypoints.csv"
-    np.savetxt(filename, all_points, delimiter=",")
-
-    str_msg = String()
-    str_msg.data = filename
 
     log_info("DONE")
     while not rospy.is_shutdown():
         rate.sleep()
         msg_pub.publish(area_msg)
-        norm_pub.publish(norm_msg)
-        waypoints_pub.publish(str_msg)
 
 if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        filename = "./gcs_waypoints.csv"
-        import os
-        os.remove(filename)
         print("terminating...")
     except Exception as e:
-        print(e)
+        traceback.print_exc()
     finally:
         exit()

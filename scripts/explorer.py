@@ -1,9 +1,8 @@
-### Explorer Trajectory Code ###
-#### Created By Kios ####
-##### 13 Nov 2023 #####
+################## Explorer Trajectory Code ##################
 __author__ = "Andreas Anastasiou, Angelos Zacharia"
-__copyright__ = "Copyright (C) 2023 Kios Center of Excellence"
+__copyright__ = "Copyright (C) 2023 KIOS Center of Excellence"
 __version__ = "7.0"
+##############################################################
 
 import rospy
 from std_msgs.msg import Header, Float32, Bool, Int16MultiArray, Int16
@@ -25,6 +24,31 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import shortest_path
 import traceback
 
+maxVel = 4.0
+debug = False
+TAG = ""
+odom = Odometry()
+target = 0
+neighbors = PointCloud2()
+command_thread = None
+cmdPub = None
+coordinates = None
+target_yaw = 0.0
+grid_resolution = 6
+namespace = "jurong"
+adjacency = np.zeros((2,2))
+adjacency_final = np.zeros((2,2))
+update=True
+mutex = threading.Lock()
+#neighbors' offsets starting from same z plane counter-clockwise
+offsets_all = [
+    (-1,-1,0), (0,-1,0), (1,-1,0), (1,0,0), (1,1,0), (0,1,0), (-1,1,0), (-1,0,0), 
+    (-1,-1,1), (0,-1,1), (1,-1,1), (1,0,1), (1,1,1), (0,1,1), (-1,1,1), (-1,0,1),(0,0,1),
+    (-1,-1,-1), (0,-1,-1), (1,-1,-1), (1,0,-1), (1,1,-1), (0,1,-1), (-1,1,-1), (-1,0,-1),(0,0,-1)
+]
+offsets_cross = [
+    (0,-1,0), (1,0,0), (0,1,0), (-1,0,0), (0,0,1), (0,0,-1)
+]
 
 def sci_dijkstra(g, arrival_pub, s, t):
     if (s==t):
@@ -114,33 +138,6 @@ def generate_path(parents, start, end):
                 break
         return path
 
-maxVel = 4.0
-debug = False
-TAG = ""
-odom = Odometry()
-target = 0
-neighbors = PointCloud2()
-command_thread = None
-cmdPub = None
-coordinates = None
-target_yaw = 0.0
-grid_resolution = 6
-namespace = "jurong"
-adjacency = np.zeros((2,2))
-adjacency_final = np.zeros((2,2))
-update=True
-mutex = threading.Lock()
-
-#neighbors' offsets starting from same z plane counter-clockwise
-offsets_all = [
-    (-1,-1,0), (0,-1,0), (1,-1,0), (1,0,0), (1,1,0), (0,1,0), (-1,1,0), (-1,0,0), 
-    (-1,-1,1), (0,-1,1), (1,-1,1), (1,0,1), (1,1,1), (0,1,1), (-1,1,1), (-1,0,1),(0,0,1),
-    (-1,-1,-1), (0,-1,-1), (1,-1,-1), (1,0,-1), (1,1,-1), (0,1,-1), (-1,1,-1), (-1,0,-1),(0,0,-1)
-]
-offsets_cross = [
-    (0,-1,0), (1,0,0), (0,1,0), (-1,0,0), (0,0,1), (0,0,-1)
-]
-
 def set_tag(tag):
     global TAG
     TAG = tag
@@ -149,6 +146,7 @@ def log_info(info):
     global TAG, debug
     if debug:
         rospy.loginfo(TAG + f"{info}")
+        publish_text_viz(TAG + f"{info}")
 
 def odomCallback(msg):
     global odom
@@ -447,7 +445,7 @@ def publish_text_viz(msg):
     marker = Marker()
     marker.header.frame_id = "world"
     marker.type = marker.TEXT_VIEW_FACING
-    marker.text = namespace + ": " + msg
+    marker.text = msg
     marker.action = marker.ADD
     marker.scale.x = 5.0
     marker.scale.y = 5.0
@@ -457,12 +455,13 @@ def publish_text_viz(msg):
     if namespace == "jurong":
         marker.color.g = 0.0
         marker.color.b = 1.0
+        marker.pose.position.y = -50.0
     else:
         marker.color.g = 1.0
         marker.color.b = 0.0
+        marker.pose.position.y = -57.0
     marker.pose.orientation.w = 1.0
     marker.pose.position.x = 0.0
-    marker.pose.position.y = -50.0
     marker.pose.position.z = 0.0
 
     viz_pub.publish(marker)
@@ -553,9 +552,6 @@ def main():
         set_tag("[" + namespace.upper() + " TRAJ SCRIPT]: ")
 		
     rospy.init_node(namespace, anonymous=True)
-    log_info(namespace)
-
-    rate = rospy.Rate(2)
 
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
@@ -563,7 +559,6 @@ def main():
     rospy.Subscriber("/"+namespace+"/command/yaw", Float32, yawCallback)
     rospy.Subscriber("/"+namespace+"/command/velocity", Float32, veloCallback)
     
-
     # create command publisher
     cmdPub = rospy.Publisher("/"+namespace+"/command/trajectory", MultiDOFJointTrajectory, queue_size=1)
     # adjacency vis pub
@@ -583,20 +578,19 @@ def main():
     # Create a service proxy
     create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
     # Register the topic with ppcom router
-    response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/occupancy_coords', 'std_msgs', 'Int16MultiArray')
-    response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/adjacency', 'std_msgs', 'Int16MultiArray')
+    create_ppcom_topic(namespace, ['all'], '/'+namespace+'/occupancy_coords', 'std_msgs', 'Int16MultiArray')
+    create_ppcom_topic(namespace, ['all'], '/'+namespace+'/adjacency', 'std_msgs', 'Int16MultiArray')
     # Register the topic with ppcom router
     if namespace == 'jurong':
-        response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
-        response = create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
+        create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
+        create_ppcom_topic(namespace, ['raffles'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
     else:
-        response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
-        response = create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
+        create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update_done', 'std_msgs', 'Bool')
+        create_ppcom_topic(namespace, ['jurong'], '/'+namespace+'/command/update', 'std_msgs', 'Bool')
 
     # Get inspection area details
     log_info("Waiting for area details")
     area_details = rospy.wait_for_message("/world_coords/"+namespace, area)
-    # num_of_nodes = int(area_details.size.x * area_details.size.y * area_details.size.z)
 
     xrange = range(int(area_details.minPoint.x + area_details.resolution.data/2), int(area_details.minPoint.x + area_details.size.x * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
     yrange = range(int(area_details.minPoint.y + area_details.resolution.data/2), int(area_details.minPoint.y + area_details.size.y * area_details.resolution.data - area_details.resolution.data/2) + int(area_details.resolution.data), int(area_details.resolution.data)) 
@@ -605,13 +599,7 @@ def main():
     # Constructing the graph
     log_info("Constructing initial graph")
     coordinates = np.asarray([(x,y,z) for x in xrange for y in yrange for z in zrange])
-
-    np.savetxt("./"+namespace+"_coordinates.csv", coordinates, delimiter=",")
-    start = time.time()
     adjacency_org = constuct_adjacency(area_details, coordinates)
-    duration = time.time() - start
-    log_info("Adjacency Build Time: " +  str(duration) + "s")
-
 
     # Get obstacles' coordinates
     log_info("Waiting for octomap")
@@ -623,37 +611,28 @@ def main():
     log_info("publishing adjacency")
     publish_graph_viz(coordinates, adjacency)
 
-    waypoint = (odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z)
-    # path planning and execution
-    log_info("Waiting for target point")
-    try:
-        rospy.wait_for_message("/"+namespace+"/command/targetPoint", Point)
-    except rospy.exceptions.ROSException as e:
-        log_info("Waiting for target point TIMEOUT")
-        target =  closest_node_index((odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z),coordinates)
-        
-    # create thread
+    # create ros control thread
     waypoint = (-3000,-3000,-3000)
     command_thread = threading.Thread(target=go_to_point)
     command_thread.start()
 
+    # create map merge thread
     update_from_neighbor_thread = threading.Thread(target=update_from_neighbor, args=(coordinates,))
     update_from_neighbor_thread.start()
+
+    log_info("Waiting for target point")
+    rospy.wait_for_message("/"+namespace+"/command/targetPoint", Point)
 
     octomap_length = 0
     while not rospy.is_shutdown():
         agent_index = closest_node_index_1((odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z),coordinates)
         path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
         # path = sci_dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
-        # log_info("Going to point: " + str(coordinates[path[1]]))
         waypoint = coordinates[path[1]]
 
-
         occupancy_coords_msg = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
-        # occ_pub.publish(occupancy_coords)
         occupancy_coords = sensor_msgs.point_cloud2.read_points(occupancy_coords_msg, skip_nans=True, field_names=['x','y','z'])
         
-
         if update:
             # log_info("Updating map")
             mutex.acquire()
@@ -670,12 +649,14 @@ def main():
             if abs(octomap_length - occupancy_coords_msg.width) > 20:
                 mutex.acquire()
                 log_info("Updating Map")
-                publish_text_viz("Map Updated")
+                # publish_text_viz("Map Updated")
                 octomap_length = occupancy_coords_msg.width
                 adjacency, adjacency_neigh = update_adjacency(adjacency_final,coordinates, occupancy_coords)
                 # adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
                 mutex.release()
-            publish_text_viz("")
+            else:
+                adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
+            # publish_text_viz("")
         
         
         
