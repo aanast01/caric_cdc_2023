@@ -271,16 +271,16 @@ def update_from_neighbor(coordinates):
     rate = rospy.Rate(1)
    
     if scenario != 'hangar':
-        occupancy_coords = PointCloud2()
+        occupancy_coords = Int16MultiArray()
         log_info("Waiting for neighbor map")
         while len(occupancy_coords.data) == 0:
             try:
                 if namespace == 'jurong' :
                     rospy.wait_for_message("/raffles/command/update/"+namespace, Bool,1)
-                    occupancy_coords = rospy.wait_for_message('/raffles/occupancy_coords/'+namespace, PointCloud2, 1)
+                    occupancy_coords = rospy.wait_for_message('/raffles/occupancy_coords/'+namespace, Int16MultiArray, 1)
                 else:
                     rospy.wait_for_message("/jurong/command/update/"+namespace, Bool,1)
-                    occupancy_coords = rospy.wait_for_message('/jurong/occupancy_coords/'+namespace, PointCloud2, 1)
+                    occupancy_coords = rospy.wait_for_message('/jurong/occupancy_coords/'+namespace, Int16MultiArray, 1)
             except rospy.exceptions.ROSException as e:
                 log_info("Waiting for neighbor map")
             rate.sleep()
@@ -293,13 +293,15 @@ def update_from_neighbor(coordinates):
         flag_pub2.publish(bool_msg)
         log_info("Merging map")
         flag_pub2.publish(bool_msg)
-        occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
-        adjacency_final, _ = update_adjacency(adjacency, coordinates, occupancy_coords)
+        # occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
+        # adjacency_final, _ = update_adjacency(adjacency, coordinates, occupancy_coords)
+        occupied_indicies = np.asarray(occupancy_coords.data)
+        adjacency[:,occupied_indicies] = 0
         flag_pub2.publish(bool_msg)
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
         flag_pub2.publish(bool_msg)
         occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
-        adjacency_final, _ = update_adjacency(adjacency_final, coordinates, occupancy_coords)
+        adjacency_final, _ = update_adjacency(adjacency, coordinates, occupancy_coords)
         flag_pub2.publish(bool_msg)
         mutex.release()
         log_info("Merging DONE")
@@ -329,7 +331,7 @@ def update_from_neighbor(coordinates):
         flag_pub.publish(bool_msg)
         flag_pub2.publish(bool_msg)
         adj_pub.publish(occupied_msg)
-        publish_graph_viz(coordinates, adjacency_final)
+        publish_graph_viz(coordinates, adjacency)
         rate.sleep
 
 def get_node_index(coordinates, x,y,z):
@@ -542,7 +544,7 @@ def main():
     # adjacency vis pub
     viz_pub = rospy.Publisher("/"+namespace+"/adjacency_viz", MarkerArray, queue_size=1)
     # occupied coordinates publisher
-    occ_pub = rospy.Publisher('/'+namespace+'/occupancy_coords', PointCloud2, queue_size=1)
+    occ_pub = rospy.Publisher('/'+namespace+'/occupancy_coords', Int16MultiArray, queue_size=1)
     # occupied coordinates publisher
     arrival_pub = rospy.Publisher('/'+namespace+'/arrived_at_target', Bool, queue_size=1)
 
@@ -556,7 +558,7 @@ def main():
     # Create a service proxy
     create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
     # Register the topic with ppcom router
-    response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/occupancy_coords', 'sensor_msgs', 'PointCloud2')
+    response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/occupancy_coords', 'std_msgs', 'Int16MultiArray')
     response = create_ppcom_topic(namespace, ['all'], '/'+namespace+'/adjacency', 'std_msgs', 'Int16MultiArray')
     # Register the topic with ppcom router
     if namespace == 'jurong':
@@ -623,7 +625,7 @@ def main():
 
 
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
-        occ_pub.publish(occupancy_coords)
+        # occ_pub.publish(occupancy_coords)
         occupancy_coords = enumerate(sensor_msgs.point_cloud2.read_points(occupancy_coords, skip_nans=True, field_names=['x','y','z']))
 
 
@@ -634,10 +636,17 @@ def main():
             mutex.release()
         else:
             mutex.acquire()
-            adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
+            # adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
+            adjacency, adjacency_neigh = update_adjacency(adjacency_final,coordinates, occupancy_coords)
             mutex.release()
             rate.sleep()
+        arr = np.sum(adjacency, axis=0)
+        obstacle_indicies = np.where(arr == 0)[0].astype(int)
 
+        occupied_msg = Int16MultiArray()
+        for ind in obstacle_indicies:
+            occupied_msg.data.append(ind)
+        occ_pub.publish(occupied_msg)
         
         
         
