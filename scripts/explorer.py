@@ -212,7 +212,6 @@ def constuct_adjacency(area_details, coordinates):
 def update_adjacency(adjacency, coordinates, obstacle_coordinates):    
     global grid_resolution
     adjacency_temp = np.copy(adjacency)
-    clear_agent_box(6, namespace)
     # Add octomap voxel centers as obstacles in graph
     inds = np.empty((0))
     for obstacle in obstacle_coordinates:
@@ -331,6 +330,7 @@ def update_from_neighbor(coordinates):
         arr = np.sum(adjacency, axis=0)
         occupied_msg = Int16MultiArray()
         occupied_msg.data = np.where(arr == 0)[0].astype(int)
+        clear_agent_box(6, namespace)
         publish_graph_viz(coordinates, adjacency)
         rate.sleep
 
