@@ -430,7 +430,12 @@ def main():
                 occupied_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray, 1)
                 log_info("Receivied map from Raffles")
             except rospy.exceptions.ROSException as e:
-                pass
+                try:
+                    occupied_msg = rospy.wait_for_message("/gcs/adjacency/"+namespace, Int16MultiArray, 0.1)
+                    # log_info("Receivied new map from GCS")
+                    new_map = True
+                except rospy.exceptions.ROSException as e:
+                    pass
                 # log_info("Waiting for map from explorers")
         rate.sleep() 
     
@@ -468,7 +473,12 @@ def main():
                     # log_info("Receivied new map from Raffles")
                     new_map = True
                 except rospy.exceptions.ROSException as e:
-                    pass
+                    try:
+                        occupied_msg = rospy.wait_for_message("/gcs/adjacency/"+namespace, Int16MultiArray, 0.1)
+                        # log_info("Receivied new map from GCS")
+                        new_map = True
+                    except rospy.exceptions.ROSException as e:
+                        pass
 
             if new_map:
                 # log_info("Updating map")

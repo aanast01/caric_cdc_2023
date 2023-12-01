@@ -233,8 +233,12 @@ def main():
                     occupied_indicies = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray,0.1)
                     log_info("Receivied map from Raffles")
                 except rospy.exceptions.ROSException as e:
-                    pass
-                    # log_info("Waiting for map from explorers")
+                    try:
+                        occupied_indicies = rospy.wait_for_message("/gcs/adjacency/"+namespace, Int16MultiArray, 0.1)
+                        log_info("Receivied map from GCS")
+                    except rospy.exceptions.ROSException as e:
+                        pass
+                        # log_info("Waiting for map from explorers")
             rate.sleep() 
         log_info("Loading map")
         adjacency = np.copy(adjacency_org)

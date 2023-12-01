@@ -5,19 +5,23 @@ __version__ = "7.0"
 ##############################################################
 
 import rospy
-from std_msgs.msg import String
+from std_msgs.msg import Int16MultiArray
 from gazebo_msgs.srv import GetModelState
 from sensor_msgs.msg import PointCloud, PointCloud2
 import sensor_msgs.point_cloud2
 from nav_msgs.msg import Odometry
 from caric_mission.srv import CreatePPComTopic
-from kios_solution.msg import area, norms
+from kios_solution.msg import area
 import traceback
 
 debug = False
 TAG = ""
 grid_res = 6
 odom = Odometry()
+jurongMap = Int16MultiArray()
+jurongTime = 0
+rafflesMap = Int16MultiArray()
+rafflesTime = 0
 
 def set_tag(tag):
     global TAG
@@ -31,6 +35,14 @@ def log_info(info):
 def odomCallback(msg):
     global odom
     odom = msg
+
+def jurongMapCallback(msg):
+    jurongMap = msg
+    jurongTime = rospy.Time.now()
+
+def rafflesMapCallback(msg):
+    rafflesMap = msg
+    rafflesTime = rospy.Time.now()
 
 def process_boxes(msg):
     global debug
@@ -151,7 +163,9 @@ def main():
         
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
-    
+    rospy.Subscriber("/jurong/adjacency/"+namespace, Int16MultiArray, jurongMapCallback)
+    rospy.Subscriber("/raffles/adjacency/"+namespace, Int16MultiArray, rafflesMapCallback)
+
     # Create a ppcom publisher
     # Wait for service to appear
     rospy.wait_for_service('/create_ppcom_topic')
@@ -160,15 +174,13 @@ def main():
     create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
     # Register the topic with ppcom router
     create_ppcom_topic('gcs', ['all'], '/world_coords', 'kios_solution', 'area')
-    create_ppcom_topic('gcs', ['all'], '/norms', 'kios_solution', 'norms')
-    create_ppcom_topic('gcs', ['all'], '/waypoints', 'std_msgs', 'String')
+    create_ppcom_topic('gcs', ['all'], '/adjacency', 'std_msgs', 'Int16MultiArray')
     # Create the publisher
     # coords pub
     msg_pub = rospy.Publisher('/world_coords', area, queue_size=1)
     # norm pub
-    norm_pub = rospy.Publisher('/norms', norms, queue_size=1)
-    # Explorers' Waypoints
-    waypoints_pub = rospy.Publisher('/waypoints',String, queue_size=1)
+    adj_pub = rospy.Publisher("/"+namespace+"/adjacency", Int16MultiArray, queue_size=1, latch=True)
+
 
     # Get Bounding Box Verticies
     bboxes = rospy.wait_for_message("/gcs/bounding_box_vertices/", PointCloud)
@@ -198,6 +210,10 @@ def main():
     while not rospy.is_shutdown():
         rate.sleep()
         msg_pub.publish(area_msg)
+        if jurongTime > rafflesTime:
+            adj_pub.publish(jurongMap)
+        else:
+            adj_pub.publish(rafflesMap)
 
 if __name__ == '__main__':
     try:

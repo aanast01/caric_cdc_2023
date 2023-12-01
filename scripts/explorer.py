@@ -261,6 +261,7 @@ def update_from_neighbor(coordinates):
     flag_pub = rospy.Publisher("/"+namespace+"/command/update_done", Bool, queue_size=1, latch=True)
     flag_pub2 = rospy.Publisher("/"+namespace+"/command/update", Bool, queue_size=1, latch=True)
     adj_pub = rospy.Publisher("/"+namespace+"/adjacency", Int16MultiArray, queue_size=1, latch=True)
+    occ_pub = rospy.Publisher("/"+namespace+"/occupancy_coords", Int16MultiArray, queue_size=1, latch=True)
     bool_msg = Bool()
     bool_msg.data = True
 
@@ -328,6 +329,7 @@ def update_from_neighbor(coordinates):
         flag_pub.publish(bool_msg)
         flag_pub2.publish(bool_msg)
         adj_pub.publish(occupied_msg)
+        occ_pub.publish(occupied_msg)
         arr = np.sum(adjacency_final, axis=0)
         occupied_msg = Int16MultiArray()
         occupied_msg.data = np.where(arr == 0)[0].astype(int)
