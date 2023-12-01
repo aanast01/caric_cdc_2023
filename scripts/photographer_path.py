@@ -6,7 +6,7 @@ __version__ = "7.0"
 
 import sys
 import rospy
-from std_msgs.msg import Bool, Float32, Int16MultiArray
+from std_msgs.msg import Bool, Float32, Int16MultiArray, Duration
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point
 from sensor_msgs.msg import PointCloud2, PointCloud
@@ -29,6 +29,7 @@ coordinates = None
 grid_resolution = 6
 namespace = "jurong"
 arrived = False
+remaining_time = sys.maxsize
 drone_IDs = {'gcs':0, 'jurong':1, 'raffles':2, 'sentosa':3, 'changi':4, 'nanyang':5}
 
 offsets_cross = [
@@ -128,6 +129,21 @@ def arrivedCallback(msg):
     global arrived
     arrived = msg.data
 
+def missionTimeCallback(msg):
+    global remaining_time
+    remaining_time = msg.data.secs
+
+def euclidean_distance_points(point1,point2):
+    p1 = np.zeros((3,1))
+    p1[0] = point1.x
+    p1[1] = point1.y
+    p1[2] = point1.z
+    p2 = np.zeros((3,1))
+    p2[0] = point2.x
+    p2[1] = point2.y
+    p2[2] = point2.z
+    return math.sqrt( math.pow(p1[0]-p2[0],2) + math.pow(p1[1]-p2[1],2) + math.pow(p1[2]-p2[2],2))
+
 def euclidean_distance(p1,point):
     p2 = np.zeros((3,1))
     p2[0] = point.x
@@ -160,6 +176,7 @@ def main():
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
     rospy.Subscriber("/"+namespace+"/arrived_at_target", Bool, arrivedCallback)
+    rospy.Subscriber("/"+namespace+"/mission_duration_remained", Duration, missionTimeCallback)
 
     # target point publisher
     target_pub = rospy.Publisher("/"+namespace+"/command/targetPoint", Point, queue_size=1)
@@ -191,7 +208,15 @@ def main():
     
     log_info("Waiting for traj script")
     rospy.wait_for_message("/"+namespace+"/arrived_at_target", Bool)
+    neighbors = rospy.wait_for_message("/"+namespace+"/nbr_odom_cloud", PointCloud2)
     init_pos = position
+    gcs_pos = Point()
+    for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
+        if point[3] == 0:
+            gcs_pos.x = point[0]
+            gcs_pos.y = point[1]
+            gcs_pos.z = point[2]
+            break
     rate.sleep()
 
     # Generate and go to TSP points
@@ -201,11 +226,11 @@ def main():
         occupied_indicies = Int16MultiArray()
         while len(occupied_indicies.data) == 0:
             try:
-                occupied_indicies = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray,1)
+                occupied_indicies = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray,0.1)
                 log_info("Receivied map from Jurong")
             except rospy.exceptions.ROSException as e:
                 try:
-                    occupied_indicies = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray,1)
+                    occupied_indicies = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray,0.1)
                     log_info("Receivied map from Raffles")
                 except rospy.exceptions.ROSException as e:
                     pass
@@ -290,9 +315,30 @@ def main():
             point.y = points[waypoint,1]
             point.z = points[waypoint,2]
             # log_info("Setting target to point: " + str(points[waypoint]))
-            while not arrived:
-                target_pub.publish(point)
-                rate.sleep()
+            while not arrived:        
+                if remaining_time < 10.0:
+                    d_init = euclidean_distance_points(position, init_pos)
+                    d_gcs = euclidean_distance_points(position, gcs_pos)
+                    los = False
+                    if d_init <= d_gcs:
+                        log_info("Setting target to initial point: " + str(init_pos))
+                        while not los:
+                            target_pub.publish(init_pos)
+                            for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
+                                if point[3] == 0:
+                                    los = True
+                            rate.sleep()
+                    elif d_gcs < d_init:
+                        log_info("Setting target to gcs point: " + str(gcs_pos))
+                        while not los:
+                            target_pub.publish(gcs_pos)
+                            for _, point in enumerate(sensor_msgs.point_cloud2.read_points(neighbors, skip_nans=True)):
+                                if point[3] == 0:
+                                    los = True
+                            rate.sleep()
+                else:
+                    target_pub.publish(point)
+                    rate.sleep()
             arrived = False
 
         if count < 2.0:

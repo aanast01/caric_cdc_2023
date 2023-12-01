@@ -82,10 +82,10 @@ def sci_dijkstra(g, arrival_pub, s, t):
         k = Pr[s, k]
     return path[::-1]
 
-def dijkstra(g, arrival_pub, s, t):
-    
+def dijkstra(g, arrival_pub, s, t):  
     if (s==t):
         # init arrival message
+        log_info("Arrived at " + str(t))
         arrived_msg = Bool()
         arrived_msg.data = True
         arrival_pub.publish(arrived_msg)
@@ -102,7 +102,7 @@ def dijkstra(g, arrival_pub, s, t):
         log_info("Target " + str(t) + " not reachable")
         arrived_msg = Bool()
         arrived_msg.data = True
-        arrival_pub.publish(arrived_msg)
+        # arrival_pub.publish(arrived_msg)
         return [s,s]
     
     q = []
@@ -331,7 +331,7 @@ def update_from_neighbor(coordinates):
         arr = np.sum(adjacency_final, axis=0)
         occupied_msg = Int16MultiArray()
         occupied_msg.data = np.where(arr == 0)[0].astype(int)
-        publish_graph_viz(coordinates, adjacency_final)
+        publish_graph_viz(coordinates, adjacency_neigh)
         rate.sleep
 
 def closest_node_index_1(node, nodes):
@@ -339,8 +339,8 @@ def closest_node_index_1(node, nodes):
     return np.argmin(distances)
 
 def closest_node_index(node, nodes):
-    global adjacency
-    arr = np.sum(adjacency, axis=0)
+    global adjacency_neigh
+    arr = np.sum(adjacency_neigh, axis=0)
     valid_dist_indices = np.nonzero(arr)[0]
     distances = np.linalg.norm(nodes[valid_dist_indices] - node, axis=1)
     # nodes = np.asarray(nodes)
@@ -536,7 +536,7 @@ def publish_graph_viz(coords, adj):
 def main():
     # init
     global cmdPub, waypoint, command_thread, update_from_neighbor_thread, coordinates, target, grid_resolution, scenario
-    global namespace, debug, adjacency, update, mutex, adjacency_final, area_details, viz_pub
+    global namespace, debug, adjacency, update, mutex, adjacency_final, area_details, viz_pub, adjacency_neigh
     try:
         namespace = rospy.get_param('namespace') # node_name/argsname
         scenario = rospy.get_param('scenario')
@@ -624,40 +624,43 @@ def main():
 
     octomap_length = 0
     while not rospy.is_shutdown():
-        agent_index = closest_node_index_1((odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z),coordinates)
-        path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
-        # path = sci_dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
-        waypoint = coordinates[path[1]]
+        try:
+            agent_index = closest_node_index_1((odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z),coordinates)
+            path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
+            # path = sci_dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
+            waypoint = coordinates[path[1]]
 
-        clear_agent_box(6, namespace)
-        occupancy_coords_msg = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
-        occupancy_coords = sensor_msgs.point_cloud2.read_points(occupancy_coords_msg, skip_nans=True, field_names=['x','y','z'])
-        
-        if update:
-            # log_info("Updating map")
-            mutex.acquire()
-            adjacency, adjacency_neigh = update_adjacency(adjacency_org,coordinates, occupancy_coords)
-            mutex.release()
-            arr = np.sum(adjacency, axis=0)
-            # obstacle_indicies = np.where(arr == 0)[0].astype(int)
-            occupied_msg = Int16MultiArray()
-            occupied_msg.data = np.where(arr == 0)[0].astype(int)
-            # for ind in obstacle_indicies:
-            #     occupied_msg.data.append(ind)
-            occ_pub.publish(occupied_msg)
-        else:            
-            if abs(octomap_length - occupancy_coords_msg.width) > 20:
-                mutex.acquire()
-                log_info("Updating Map")
-                # publish_text_viz("Map Updated")
-                octomap_length = occupancy_coords_msg.width
-                adjacency_final, adjacency_neigh = update_adjacency(adjacency_final,coordinates, occupancy_coords)
-                # adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
-                mutex.release()
-            else:
-                adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
-            # publish_text_viz("")
+            clear_agent_box(6, namespace)
+            occupancy_coords_msg = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
+            occupancy_coords = sensor_msgs.point_cloud2.read_points(occupancy_coords_msg, skip_nans=True, field_names=['x','y','z'])
             
+            if update:
+                # log_info("Updating map")
+                mutex.acquire()
+                adjacency, adjacency_neigh = update_adjacency(adjacency_org,coordinates, occupancy_coords)
+                mutex.release()
+                arr = np.sum(adjacency, axis=0)
+                # obstacle_indicies = np.where(arr == 0)[0].astype(int)
+                occupied_msg = Int16MultiArray()
+                occupied_msg.data = np.where(arr == 0)[0].astype(int)
+                # for ind in obstacle_indicies:
+                #     occupied_msg.data.append(ind)
+                occ_pub.publish(occupied_msg)
+            else:            
+                if abs(octomap_length - occupancy_coords_msg.width) > 20:
+                    mutex.acquire()
+                    log_info("Updating Map")
+                    # publish_text_viz("Map Updated")
+                    octomap_length = occupancy_coords_msg.width
+                    adjacency_final, adjacency_neigh = update_adjacency(adjacency_final,coordinates, occupancy_coords)
+                    # adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
+                    mutex.release()
+                else:
+                    adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
+                # publish_text_viz("")
+
+        except Exception as e:
+            pass
         
 if __name__ == '__main__':
     try:

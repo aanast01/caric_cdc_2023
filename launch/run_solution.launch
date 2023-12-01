@@ -32,7 +32,7 @@
         <param name="debug" value="true" />
         
         <node pkg="octomap_server" type="octomap_server_node" name="octomap_server_$(arg namespace)">
-		    <param name="resolution" value="3" />
+		    <param name="resolution" value="4" />
 		
             <!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
             <param name="frame_id" type="string" value="world" />
@@ -69,7 +69,7 @@
             <param name="debug" value="true" />
 
             <node pkg="octomap_server" type="octomap_server_node" name="octomap_server_$(arg namespace)">
-                <param name="resolution" value="3" />
+                <param name="resolution" value="4" />
                 
                 <!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
                 <param name="frame_id" type="string" value="world" />

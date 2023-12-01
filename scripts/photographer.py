@@ -278,8 +278,8 @@ def go_to_point():
         rate.sleep()
 
 def closest_node_index(node, nodes):
-    global adjacency
-    arr = np.sum(adjacency, axis=0)
+    global adjacency_neigh
+    arr = np.sum(adjacency_neigh, axis=0)
     valid_dist_indices = np.nonzero(arr)[0]
     distances = np.linalg.norm(nodes[valid_dist_indices] - node, axis=1)
     # nodes = np.asarray(nodes)
@@ -370,7 +370,7 @@ def publish_graph_viz():
 
 def main():
     # init
-    global cmdPub, waypoint, command_thread, coordinates, target, grid_resolution, namespace, debug, adjacency, area_details, viz_pub
+    global cmdPub, waypoint, command_thread, coordinates, target, grid_resolution, namespace, debug, adjacency, area_details, viz_pub, adjacency_neigh
     try:
         namespace = rospy.get_param('namespace') # node_name/argsname
         scenario = rospy.get_param('scenario')
@@ -450,32 +450,34 @@ def main():
         target =  closest_node_index((odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z),coordinates)
 
     while not rospy.is_shutdown():
-        agent_index = closest_node_index_1(([odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z]),coordinates)
-        #log_info("Generating path. Starting Point: " + str(agent_index) + " Target Point: " + str(target))
-        path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
-        #log_info("Going to point: " + str(coordinates[path[1]]))
-        waypoint = coordinates[path[1]]
-
-        new_map = False
         try:
-            occupied_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray, 0.1)
-            log_info("Receivied new map from Jurong")
-            new_map = True
-        except rospy.exceptions.ROSException as e:
+            agent_index = closest_node_index_1(([odom.pose.pose.position.x,odom.pose.pose.position.y,odom.pose.pose.position.z]),coordinates)
+            #log_info("Generating path. Starting Point: " + str(agent_index) + " Target Point: " + str(target))
+            path = dijkstra(adjacency_neigh, arrival_pub, agent_index, target)
+            #log_info("Going to point: " + str(coordinates[path[1]]))
+            waypoint = coordinates[path[1]]
+
+            new_map = False
             try:
-                occupied_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray, 0.1)
-                log_info("Receivied new map from Raffles")
+                occupied_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray, 0.1)
+                # log_info("Receivied new map from Jurong")
                 new_map = True
             except rospy.exceptions.ROSException as e:
-                pass
+                try:
+                    occupied_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray, 0.1)
+                    # log_info("Receivied new map from Raffles")
+                    new_map = True
+                except rospy.exceptions.ROSException as e:
+                    pass
 
-        if new_map:
-            log_info("Updating map")
-            adjacency = np.copy(adjacency_org)
-            adjacency[:,np.asarray(occupied_msg.data)] = 0
-        adjacency_neigh = update_adjacency_with_neighbors(adjacency)
-        publish_graph_viz()
-
+            if new_map:
+                # log_info("Updating map")
+                adjacency = np.copy(adjacency_org)
+                adjacency[:,np.asarray(occupied_msg.data)] = 0
+            adjacency_neigh = update_adjacency_with_neighbors(adjacency)
+            publish_graph_viz()
+        except Exception as e:
+            pass
 
 if __name__ == '__main__':
     try:
