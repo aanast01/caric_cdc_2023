@@ -281,13 +281,12 @@ def update_from_neighbor(coordinates):
                     occupancy_coords = rospy.wait_for_message('/jurong/occupancy_coords/'+namespace, Int16MultiArray, 1)
             except rospy.exceptions.ROSException as e:
                 log_info("Waiting for neighbor map")
-            rate.sleep()
-
-        update = False
+            rate.sleep()  
         flag_pub.publish(bool_msg)
         flag_pub2.publish(bool_msg)
         log_info("Acquiring mutex")
         mutex.acquire()
+        update = False
         flag_pub2.publish(bool_msg)
         log_info("Merging map")
         flag_pub2.publish(bool_msg)
@@ -305,10 +304,10 @@ def update_from_neighbor(coordinates):
         mutex.release()
         log_info("Merging DONE")
     else:
-        update = False
         flag_pub2.publish(bool_msg)
         log_info("Acquiring mutex")
         mutex.acquire()
+        update = False
         log_info("Final map update")
         clear_agent_box(6, namespace)
         occupancy_coords = rospy.wait_for_message('/'+namespace+'/octomap_point_cloud_centers', PointCloud2)
@@ -654,9 +653,13 @@ def main():
                     log_info("Updating Map")
                     # publish_text_viz("Map Updated")
                     octomap_length = occupancy_coords_msg.width
-                    adjacency_final, adjacency_neigh = update_adjacency(adjacency_final,coordinates, occupancy_coords)
-                    # adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
-                    mutex.release()
+                    try:
+                        adjacency_final, adjacency_neigh = update_adjacency(adjacency_final,coordinates, occupancy_coords)
+                        # adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
+                    except:
+                        pass
+                    finally:
+                        mutex.release()
                 else:
                     adjacency_neigh = update_adjacency_with_neighbors(adjacency_final)
                 # publish_text_viz("")

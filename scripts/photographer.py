@@ -423,17 +423,16 @@ def main():
     log_info("Waiting for map from explorers")
     while len(occupied_msg.data) == 0:
         try:
-            occupied_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray, 1)
+            occupied_msg = rospy.wait_for_message("/jurong/adjacency/"+namespace, Int16MultiArray, 0.1)
             log_info("Receivied map from Jurong")
         except rospy.exceptions.ROSException as e:
             try:
-                occupied_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray, 1)
+                occupied_msg = rospy.wait_for_message("/raffles/adjacency/"+namespace, Int16MultiArray, 0.1)
                 log_info("Receivied map from Raffles")
             except rospy.exceptions.ROSException as e:
                 try:
                     occupied_msg = rospy.wait_for_message("/gcs/adjacency/"+namespace, Int16MultiArray, 0.1)
-                    # log_info("Receivied new map from GCS")
-                    new_map = True
+                    log_info("Receivied new map from GCS")
                 except rospy.exceptions.ROSException as e:
                     pass
                 # log_info("Waiting for map from explorers")

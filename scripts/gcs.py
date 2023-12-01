@@ -37,10 +37,12 @@ def odomCallback(msg):
     odom = msg
 
 def jurongMapCallback(msg):
+    global jurongMap, jurongTime
     jurongMap = msg
     jurongTime = rospy.Time.now()
 
 def rafflesMapCallback(msg):
+    global rafflesMap, rafflesTime
     rafflesMap = msg
     rafflesTime = rospy.Time.now()
 
@@ -129,7 +131,7 @@ def find_world_min_max(msg, min_max):
     return [minx, maxx, miny, maxy, minz, maxz]
 
 def main():
-    global debug, scenario
+    global debug, scenario, jurongMap, jurongTime, rafflesMap, rafflesTime
     # init
     try:
         namespace = rospy.get_param('namespace')
@@ -160,7 +162,9 @@ def main():
             rospy.loginfo("[TESTING FLIGHT SCRIPT: GET STATE]: " + namespace)
         state = get_state(model_name=namespace)
         rate.sleep()
-        
+    
+    jurongTime = rospy.Time.now()
+    rafflesTime = rospy.Time.now()
     # subscribe to self topics
     rospy.Subscriber("/"+namespace+"/ground_truth/odometry", Odometry, odomCallback)
     rospy.Subscriber("/jurong/adjacency/"+namespace, Int16MultiArray, jurongMapCallback)
@@ -174,7 +178,7 @@ def main():
     create_ppcom_topic = rospy.ServiceProxy('/create_ppcom_topic', CreatePPComTopic)
     # Register the topic with ppcom router
     create_ppcom_topic('gcs', ['all'], '/world_coords', 'kios_solution', 'area')
-    create_ppcom_topic('gcs', ['all'], '/adjacency', 'std_msgs', 'Int16MultiArray')
+    create_ppcom_topic('gcs', ['all'], "/"+namespace+"/adjacency", 'std_msgs', 'Int16MultiArray')
     # Create the publisher
     # coords pub
     msg_pub = rospy.Publisher('/world_coords', area, queue_size=1)
