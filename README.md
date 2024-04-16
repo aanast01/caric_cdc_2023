@@ -11,10 +11,10 @@ It then generates optimized, collision-free inspection paths, thereby ensuring c
 We consider a system of multiple heterogeneous quadrotor UAVs each equipped with different sensors, such as gimballed cameras and LiDAR, each capable of inspecting the surface area of the 
 infrastructure of interest using only limited knowledge about the environment, under communication and time constraints.
 
-#### Note
-This work was motivated by the Cooperative Aerial Robots Inspection Challenge (CARIC) competition, held during the 2023 IEEE Conference on Decision and Control (CDC),
-whose purpose was to simulate and benchmark multi-UAV infrastructure inspection methodologies in real-world-like inspection scenarios.
-
 ### Citation
 This work has been accepted for publication at the 2024 International Conference on Unmanned Aircraft Systems (ICUAS) to be held on June 4-7 in Chania, Crete, Greece.
 As soon as the proceeding of the conference are available, a citation tamplate will be given here.
+
+#### Note
+This work was motivated by the Cooperative Aerial Robots Inspection Challenge (CARIC) competition, held during the 2023 IEEE Conference on Decision and Control (CDC),
+whose purpose was to simulate and benchmark multi-UAV infrastructure inspection methodologies in real-world-like inspection scenarios.
