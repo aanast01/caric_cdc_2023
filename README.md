@@ -18,3 +18,7 @@ As soon as the proceeding of the conference are available, a citation tamplate w
 #### Note
 This work was motivated by the Cooperative Aerial Robots Inspection Challenge (CARIC) competition, held during the 2023 IEEE Conference on Decision and Control (CDC),
 whose purpose was to simulate and benchmark multi-UAV infrastructure inspection methodologies in real-world-like inspection scenarios.
+
+## Authors
+[Andreas Anastasiou](https://github.com/aanast01)
+[Angelos Zacharia](https://github.com/angeloszacharia)
