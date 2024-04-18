@@ -20,5 +20,5 @@ This work was motivated by the Cooperative Aerial Robots Inspection Challenge (C
 whose purpose was to simulate and benchmark multi-UAV infrastructure inspection methodologies in real-world-like inspection scenarios.
 
 ## Authors
-[Andreas Anastasiou](https://github.com/aanast01)
+[Andreas Anastasiou](https://github.com/aanast01) <br>
 [Angelos Zacharia](https://github.com/angeloszacharia)
