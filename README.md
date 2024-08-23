@@ -13,9 +13,9 @@ infrastructure of interest using only limited knowledge about the environment, u
 
 ## Usage
 You can run the solution after compiling this package with the following command
-'''
+```shell
 roslaunch kios_solution run_solution
-'''
+```
 
 ### Citation
 This work has been accepted for publication at the 2024 International Conference on Unmanned Aircraft Systems (ICUAS) to be held on June 4-7 in Chania, Crete, Greece.
