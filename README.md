@@ -11,6 +11,12 @@ It then generates optimized, collision-free inspection paths, thereby ensuring c
 We consider a system of multiple heterogeneous quadrotor UAVs each equipped with different sensors, such as gimballed cameras and LiDAR, each capable of inspecting the surface area of the 
 infrastructure of interest using only limited knowledge about the environment, under communication and time constraints.
 
+## Usage
+You can run the solution after compiling this package with the following command
+'''
+roslaunch kios_solution run_solution
+'''
+
 ### Citation
 This work has been accepted for publication at the 2024 International Conference on Unmanned Aircraft Systems (ICUAS) to be held on June 4-7 in Chania, Crete, Greece.
 As soon as the proceeding of the conference are available, a citation tamplate will be given here.
