@@ -18,8 +18,7 @@ roslaunch kios_solution run_solution
 ```
 
 ### Citation
-This work has been accepted for publication at the 2024 International Conference on Unmanned Aircraft Systems (ICUAS) to be held on June 4-7 in Chania, Crete, Greece.
-As soon as the proceeding of the conference are available, a citation tamplate will be given here.
+A. Anastasiou, A. Zacharia, S. Papaioannou, P. Kolios, C. G. Panayiotou and M. M. Polycarpou, "Automated Real-Time Inspection in Indoor and Outdoor 3D Environments with Cooperative Aerial Robots," 2024 International Conference on Unmanned Aircraft Systems (ICUAS), Chania - Crete, Greece, 2024, pp. 496-504, doi: 10.1109/ICUAS60882.2024.10557006.
 
 #### Note
 This work was motivated by the Cooperative Aerial Robots Inspection Challenge (CARIC) competition, held during the 2023 IEEE Conference on Decision and Control (CDC),
